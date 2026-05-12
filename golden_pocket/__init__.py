@@ -1,0 +1,2 @@
+"""Golden pocket sector scanner."""
+

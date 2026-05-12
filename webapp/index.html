@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Golden Pocket Market Explorer</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar panel panel--glass" data-layout-id="1" data-layout-label="Toolbar">
+        <div class="sidebar__brand">
+          <div class="brand">
+            <div class="brand__mark">GP</div>
+            <div class="brand__text">
+              <p class="eyebrow">Golden Pocket Lab</p>
+            </div>
+          </div>
+          <span class="status-pill" id="universe-status">Market universe loading</span>
+        </div>
+
+        <div class="sidebar__filters">
+          <div class="sidebar__filter-stack">
+            <label class="filter-field">
+              <span>Sector</span>
+              <select id="sector-filter" aria-label="Sector filter"></select>
+            </label>
+            <label class="filter-field">
+              <span>Industry</span>
+              <select id="industry-filter" aria-label="Industry filter"></select>
+            </label>
+            <div class="filter-field filter-field--ticker">
+              <span>Selected Ticker</span>
+              <div class="ticker-combobox" id="ticker-combobox">
+                <button class="ticker-combobox__button" id="ticker-filter-button" type="button" aria-haspopup="listbox" aria-expanded="false">
+                  <span id="ticker-filter-label">All companies</span>
+                </button>
+                <div class="ticker-combobox__menu" id="ticker-filter-menu" hidden>
+                  <input id="ticker-filter-search" type="search" placeholder="Search ticker or company" autocomplete="off" aria-label="Search ticker selector" />
+                  <div class="ticker-combobox__options" id="ticker-filter-options" role="listbox" aria-label="Ticker options"></div>
+                </div>
+              </div>
+              <select id="ticker-filter" aria-label="Ticker selector" hidden></select>
+            </div>
+            <label class="filter-switch" for="research-ready-only">
+              <input id="research-ready-only" type="checkbox" />
+              <span>Research-ready only</span>
+              <small>Show only tickers with active scenario predictions</small>
+            </label>
+            <button id="clear-filters" class="filter-button" type="button">Clear filters</button>
+          </div>
+        </div>
+
+        <div class="sidebar__actions">
+          <button class="layout-toggle" id="layout-toggle" type="button" aria-pressed="false">Layout mode</button>
+          <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Dark mode</button>
+        </div>
+      </aside>
+
+      <div class="report-shell">
+        <main class="dashboard">
+          <section class="panel reveal lens-bar" data-layout-id="6" data-layout-label="Target Model Buttons">
+            <div class="lens-bar__inner">
+              <p class="eyebrow">Price Target Model</p>
+              <div class="method-switcher" id="method-switcher" aria-label="Target method switcher"></div>
+            </div>
+          </section>
+
+          <section class="panel reveal opportunity-panel" data-layout-id="7" data-layout-label="Opportunity Table">
+            <label class="report-search opportunity-search">
+              <span>Search company, ticker, sector, or industry</span>
+              <input id="ticker-search" type="search" placeholder="Try Eli Lilly, LLY, Health Care, biotech..." />
+            </label>
+            <div class="opportunity-panel__header">
+              <div class="section-heading">
+                <p class="eyebrow">Opportunity Table</p>
+                <h2 id="roster-title">Scan the filtered ticker universe</h2>
+              </div>
+              <div class="opportunity-panel__scenario">
+                <p class="eyebrow">Scenario</p>
+                <div class="scenario-switcher" id="scenario-switcher" aria-label="Scenario switcher"></div>
+              </div>
+            </div>
+            <div class="roster-toolbar">
+              <p class="roster-note" id="company-count"></p>
+              <p class="roster-note roster-note--muted" id="roster-note">
+                The active table ranks matching tickers by the current setup score and updates targets using the selected scenario and target lens.
+              </p>
+            </div>
+            <div class="opportunity-table-wrap">
+              <table class="opportunity-table">
+                <thead>
+                  <tr>
+                    <th>Company</th>
+                    <th>Classification</th>
+                    <th>Setup</th>
+                    <th>Model</th>
+                    <th>Scenario</th>
+                    <th>52W Range</th>
+                    <th>Trend</th>
+                    <th>Liquidity</th>
+                  </tr>
+                </thead>
+                <tbody id="opportunity-table-body"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel reveal detail-panel" data-layout-id="9" data-layout-label="Ticker Decision Card">
+            <div class="section-heading">
+              <p class="eyebrow">Selected Ticker</p>
+              <h2>Single-ticker decision card</h2>
+            </div>
+            <div class="detail-card">
+              <div class="detail-card__hero">
+                <div class="detail-card__identity">
+                  <p class="eyebrow" id="company-kind"></p>
+                  <h3 id="company-name"></h3>
+                  <div class="company-chip-row" id="company-chips"></div>
+                </div>
+                <div class="detail-card__pricing">
+                  <div class="vehicle-price">
+                    <span id="company-price"></span>
+                    <small id="company-date"></small>
+                  </div>
+                  <div class="detail-card__snapshot">
+                    <p class="vehicle-panel__title">Active Scenario Target</p>
+                    <strong id="company-active-target">--</strong>
+                    <small id="company-active-target-copy">Select a ticker from the opportunity table to load the target view.</small>
+                  </div>
+                  <div class="method-status">
+                    <span class="status-pill status-pill--method" id="active-method-badge"></span>
+                    <p id="active-method-copy"></p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="detail-card__grid">
+                <article class="detail-card__block">
+                  <p class="vehicle-panel__title">Price Target View</p>
+                  <h3 id="method-fit-title"></h3>
+                  <p id="method-fit-body"></p>
+                  <div class="target-grid" id="company-targets"></div>
+                  <div class="method-compare" id="method-compare"></div>
+                </article>
+
+                <article class="detail-card__block">
+                  <p class="vehicle-panel__title">Key Fundamentals</p>
+                  <div class="fundamentals-grid" id="company-fundamentals"></div>
+                </article>
+
+                <article class="detail-card__block">
+                  <p class="vehicle-panel__title">Score Breakdown</p>
+                  <div class="vehicle-scoreboard" id="company-scoreboard"></div>
+                </article>
+
+                <article class="detail-card__block">
+                  <p class="vehicle-panel__title">Research Notes</p>
+                  <p id="company-thesis"></p>
+                  <p class="detail-card__subhead">Positioning</p>
+                  <p id="company-positioning"></p>
+                  <p class="detail-card__subhead">Risks</p>
+                  <ul id="company-risks" class="compact-list"></ul>
+                </article>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel reveal support-panel" data-layout-id="10" data-layout-label="Supporting Context">
+            <div class="section-heading">
+              <p class="eyebrow">Supporting Context</p>
+              <h2>Classification facts and method metadata</h2>
+            </div>
+            <div class="support-grid">
+              <article class="vehicle-panel">
+                <p class="vehicle-panel__title">Selection Facts</p>
+                <ul id="company-facts" class="compact-list"></ul>
+              </article>
+              <article class="vehicle-panel">
+                <p class="vehicle-panel__title">Method Metadata</p>
+                <div class="method-fit-meta" id="method-fit-meta"></div>
+              </article>
+            </div>
+          </section>
+
+        <section class="panel reveal" data-layout-id="11" data-layout-label="Trigger Lab">
+          <div class="section-heading">
+            <p class="eyebrow">Trigger Lab</p>
+            <h2>Turn the thesis into an entry decision</h2>
+          </div>
+          <div class="trigger-layout">
+            <form class="trigger-form" id="trigger-form">
+              <label class="toggle">
+                <input type="checkbox" data-points="25" checked />
+                <span>
+                  <strong>Rates are stable or easing</strong>
+                  <small>Use this when the 10-year is flat to lower, not breaking higher.</small>
+                </span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" data-points="30" checked />
+                <span>
+                  <strong>Price is consolidating, not vertical</strong>
+                  <small>Prefer a 3-7 day base or controlled pullback into support.</small>
+                </span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" data-points="30" checked />
+                <span>
+                  <strong>Earnings momentum still confirms</strong>
+                  <small>Next read should preserve occupancy, NOI, and FFO guidance strength.</small>
+                </span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" data-points="15" />
+                <span>
+                  <strong>Broad industry breadth is improving</strong>
+                  <small>Helpful extra confirmation if the whole sleeve is participating rather than only a few leaders.</small>
+                </span>
+              </label>
+            </form>
+
+            <article class="trigger-output panel panel--inset">
+              <p class="eyebrow">Readiness</p>
+              <div class="readiness-meter">
+                <div class="readiness-meter__fill" id="readiness-fill"></div>
+              </div>
+              <h3 id="readiness-label"></h3>
+              <p id="readiness-body"></p>
+              <div class="readiness-badges" id="readiness-badges"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel reveal" data-layout-id="12" data-layout-label="Seed Evidence">
+          <div class="section-heading">
+            <p class="eyebrow">Seed Evidence</p>
+            <h2>Why the deep-research pilot still starts here</h2>
+          </div>
+          <div class="evidence-grid">
+            <article class="evidence-card">
+              <h3>Welltower</h3>
+              <ul class="compact-list">
+                <li>Q1 2026 normalized FFO/share: $1.47, up 23%</li>
+                <li>SHOP same-store NOI growth: 22.1%</li>
+                <li>Guidance midpoint raised to $6.28</li>
+              </ul>
+            </article>
+            <article class="evidence-card">
+              <h3>Ventas</h3>
+              <ul class="compact-list">
+                <li>Q1 2026 normalized FFO/share: $0.94, up 9%</li>
+                <li>SHOP same-store cash NOI growth: more than 15%</li>
+                <li>Guidance midpoint raised to $3.86</li>
+              </ul>
+            </article>
+            <article class="evidence-card">
+              <h3>Healthpeak</h3>
+              <ul class="compact-list">
+                <li>Q1 2026 FFO as adjusted: $0.45/share</li>
+                <li>Senior housing same-store NOI growth: 13.8%</li>
+                <li>More mixed broad-portfolio setup than WELL or VTR</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel panel--sources reveal" data-layout-id="13" data-layout-label="Sources">
+          <div class="section-heading">
+            <p class="eyebrow">Sources</p>
+            <h2>Linked research inputs</h2>
+          </div>
+          <ul class="source-list">
+            <li><a href="https://www.sec.gov/files/company_tickers_exchange.json" target="_blank" rel="noreferrer">SEC company_tickers_exchange.json</a></li>
+            <li><a href="https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data" target="_blank" rel="noreferrer">SEC EDGAR Data Access Guidance</a></li>
+            <li><a href="https://www.sec.gov/search-filings/edgar-application-programming-interfaces" target="_blank" rel="noreferrer">SEC EDGAR API Documentation</a></li>
+            <li><a href="https://www.reit.com/what-reit/reit-sectors/health-care" target="_blank" rel="noreferrer">Nareit Health Care REIT Sector Directory</a></li>
+            <li><a href="https://fred.stlouisfed.org/series/DGS10" target="_blank" rel="noreferrer">FRED 10-Year Treasury Yield</a></li>
+            <li><a href="https://www.ssga.com/us/en/intermediary/etfs/state-street-real-estate-select-sector-spdr-etf-xlre" target="_blank" rel="noreferrer">State Street XLRE Fund Page</a></li>
+            <li><a href="https://welltower.com/wp-content/uploads/2026/04/Business-Update-1Q26_vFFF.pdf" target="_blank" rel="noreferrer">Welltower Q1 2026 Business Update</a></li>
+            <li><a href="https://ir.ventasreit.com/news/news-details/2026/Ventas-Reports-2026-First-Quarter-Results/default.aspx" target="_blank" rel="noreferrer">Ventas Q1 2026 Results</a></li>
+            <li><a href="https://ir.healthpeak.com/news/news-details/2026/Healthpeak-Properties-Raises-2026-Earnings-Guidance-Following-Completion-of-the-Janus-Living-IPO-Accretive-Capital-Allocation-and-Strong-First-Quarter-2026-Results/default.aspx" target="_blank" rel="noreferrer">Healthpeak Q1 2026 Results</a></li>
+          </ul>
+        </section>
+        </main>
+      </div>
+    </div>
+
+    <aside class="layout-legend" id="layout-legend" hidden aria-live="polite"></aside>
+
+    <script src="./data/market_universe.js"></script>
+    <script src="./data/research_profiles.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

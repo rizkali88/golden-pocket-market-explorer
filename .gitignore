@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+cloud_backups/
+data/sec_cache/
+data/sec_cache_sample/
+data/sec_cache_system_sample/
+data/research_cache/
+data/research_cache_sample/
+data/research_cache_system_sample/
+tests_artifacts/
+tmpnkasudef/
