@@ -136,6 +136,101 @@ body::before {
   font-weight: 800;
 }
 
+.decision-stack-panel {
+  display: grid;
+  gap: 22px;
+}
+
+.agent-stack-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.agent-stack-card,
+.trading-decision-flow article {
+  display: grid;
+  gap: 16px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  padding: 20px;
+  background:
+    radial-gradient(circle at top right, rgba(124, 213, 207, 0.14), transparent 32%),
+    rgba(255, 255, 255, 0.06);
+}
+
+.agent-stack-card--john {
+  border-color: rgba(201, 111, 59, 0.34);
+}
+
+.agent-stack-card--max {
+  border-color: rgba(31, 107, 99, 0.34);
+}
+
+.agent-stack-card__header {
+  display: grid;
+  gap: 4px;
+}
+
+.agent-stack-card__header span,
+.agent-output span,
+.trading-decision-flow article span {
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.agent-stack-card__header strong {
+  color: var(--ink);
+  font-family: "Georgia", "Palatino Linotype", serif;
+  font-size: clamp(1.5rem, 2.5vw, 2.1rem);
+  line-height: 1;
+}
+
+.agent-stack-card p,
+.trading-decision-flow p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.stack-pill-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stack-pill-grid span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 10px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.agent-output {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.agent-output strong,
+.trading-decision-flow strong {
+  display: block;
+  color: var(--ink);
+  font-size: 1.08rem;
+  margin-top: 4px;
+}
+
+.trading-decision-flow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
 .report-header {
   display: grid;
   gap: 16px;
@@ -1059,9 +1154,11 @@ p {
   .detail-card__hero,
   .detail-card__grid,
   .support-grid,
+  .agent-stack-grid,
   .vehicle-layout,
   .scenario-layout,
   .trigger-layout,
+  .trading-decision-flow,
   .metric-grid,
   .evidence-grid,
   .target-grid {

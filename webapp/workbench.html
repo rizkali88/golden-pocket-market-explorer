@@ -70,6 +70,88 @@
             </p>
           </section>
 
+          <section class="panel reveal decision-stack-panel" data-layout-id="5" data-layout-label="John and Max Decision Stack">
+            <div class="section-heading">
+              <p class="eyebrow">Trading Decision Stack</p>
+              <h2>John validates the company. Max validates the trade.</h2>
+            </div>
+
+            <div class="agent-stack-grid">
+              <article class="agent-stack-card agent-stack-card--john">
+                <div class="agent-stack-card__header">
+                  <span>John</span>
+                  <strong>Institutional Analyst</strong>
+                </div>
+                <p>
+                  John decides whether the company deserves capital. His answer is based on
+                  fundamentals, valuation, revisions, catalysts, peer quality, and downside risk.
+                </p>
+                <div class="stack-pill-grid">
+                  <span>Financial statements</span>
+                  <span>FMP fundamentals</span>
+                  <span>SEC 10-K / 10-Q / 8-K</span>
+                  <span>Analyst estimates</span>
+                  <span>Peer multiples</span>
+                  <span>ROIC / margins / FCF</span>
+                  <span>Balance sheet risk</span>
+                  <span>News and catalysts</span>
+                  <span>Macro regime</span>
+                  <span>Ownership / sentiment</span>
+                </div>
+                <div class="agent-output">
+                  <span>John output</span>
+                  <strong>Buy / Watch / Avoid</strong>
+                </div>
+              </article>
+
+              <article class="agent-stack-card agent-stack-card--max">
+                <div class="agent-stack-card__header">
+                  <span>Max</span>
+                  <strong>Technical Analyst</strong>
+                </div>
+                <p>
+                  Max decides whether price gives us an executable trade. His answer is based on
+                  trend, structure, liquidity, Fibonacci, Elliott Wave, ICT, and reward/risk.
+                </p>
+                <div class="stack-pill-grid">
+                  <span>Daily / weekly OHLCV</span>
+                  <span>20 / 50 / 200D averages</span>
+                  <span>RSI / MACD / ATR</span>
+                  <span>Relative strength</span>
+                  <span>Swing highs / lows</span>
+                  <span>Fibonacci levels</span>
+                  <span>Elliott Wave state</span>
+                  <span>Liquidity sweeps</span>
+                  <span>Fair value gaps</span>
+                  <span>Order blocks</span>
+                </div>
+                <div class="agent-output">
+                  <span>Max output</span>
+                  <strong>Enter / Wait / Avoid</strong>
+                </div>
+              </article>
+            </div>
+
+            <div class="trading-decision-flow">
+              <article>
+                <span>Final Output</span>
+                <strong>Trading Decision</strong>
+                <p>
+                  The final call combines John and Max into Buy, Wait, Watch, or Avoid with
+                  conviction, entry zone, stop, targets, reward/risk, and data confidence.
+                </p>
+              </article>
+              <article>
+                <span>Data Space</span>
+                <strong>Prod + Non-Prod</strong>
+                <p>
+                  Keep the original page on stable production data. Let the workbench use
+                  non-prod bundles while we change schemas for John, Max, and Trading Decision.
+                </p>
+              </article>
+            </div>
+          </section>
+
           <section class="panel reveal lens-bar" data-layout-id="6" data-layout-label="Target Model Buttons">
             <div class="lens-bar__inner">
               <p class="eyebrow">Price Target Model</p>
