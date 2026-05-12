@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 from golden_pocket.market_pipeline import build_market_universe
@@ -28,6 +29,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--research-pause-seconds", type=float, default=0.25)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--force-refresh", action="store_true")
+    parser.add_argument(
+        "--fmp-api-key",
+        default=os.environ.get("FMP_API_KEY"),
+        help="Optional Financial Modeling Prep API key. Defaults to FMP_API_KEY from the environment.",
+    )
+    parser.add_argument("--fmp-cache-hours", type=float, default=24.0)
+    parser.add_argument("--skip-fmp", action="store_true")
     return parser.parse_args()
 
 
@@ -60,6 +68,9 @@ def main() -> int:
         pause_seconds=args.research_pause_seconds,
         limit=args.limit,
         force_refresh=args.force_refresh,
+        fmp_api_key=args.fmp_api_key,
+        fmp_cache_hours=args.fmp_cache_hours,
+        skip_fmp=args.skip_fmp,
     )
     return 0
 

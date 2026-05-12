@@ -40,10 +40,22 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Restore data-source cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/sec_cache
+            data/research_cache
+          key: market-data-cache-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            market-data-cache-${{ runner.os }}-
+
       - name: Refresh generated market data
         id: refresh
         if: github.event_name != 'push'
         continue-on-error: true
+        env:
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
         run: |
           python build_market_system.py \
             --output-dir webapp/data \

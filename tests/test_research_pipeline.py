@@ -5,6 +5,9 @@ from golden_pocket.research_pipeline import (
     build_method_meta,
     build_scores,
     build_targets,
+    build_symbol_map,
+    first_number,
+    parse_fmp_response,
 )
 
 
@@ -57,6 +60,18 @@ class ResearchPipelineTests(unittest.TestCase):
 
         meta = build_method_meta(metric, scores, targets)
         self.assertIn(meta["recommendedMethod"], {"consensus", "valuation", "hybrid"})
+
+    def test_fmp_rows_parse_json_and_csv(self) -> None:
+        json_rows = parse_fmp_response('[{"symbol":"AAPL","peRatioTTM":28.4}]')
+        self.assertEqual(json_rows[0]["symbol"], "AAPL")
+
+        csv_rows = parse_fmp_response("symbol,peRatioTTM\nMSFT,31.2\n")
+        self.assertEqual(csv_rows[0]["symbol"], "MSFT")
+
+    def test_fmp_symbol_map_and_numeric_values(self) -> None:
+        rows = [{"symbol": "BRK.B", "marketCapTTM": "900000000000"}]
+        mapped = build_symbol_map(rows)
+        self.assertEqual(first_number(mapped["BRK.B"], ["marketCapTTM"]), 900000000000.0)
 
 
 if __name__ == "__main__":

@@ -1101,6 +1101,35 @@ function formatCompactNumber(value, options = {}) {
   return formatter.format(Number(value));
 }
 
+function formatMultiple(value) {
+  if (value == null || Number.isNaN(Number(value))) {
+    return "--";
+  }
+  return `${Number(value).toFixed(1)}x`;
+}
+
+function formatNumber(value, digits = 2) {
+  if (value == null || Number.isNaN(Number(value))) {
+    return "--";
+  }
+  return Number(value).toFixed(digits);
+}
+
+function formatShortDate(value) {
+  if (!value) {
+    return "date pending";
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return parsed.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 function titleCase(value) {
   return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
 }
@@ -2227,57 +2256,87 @@ function getPrimaryValuationCopy(company) {
 }
 
 function buildFundamentalItems(company, resolved, opportunity) {
-  const rangePosition = opportunity.rangePositionPct;
-  const target = resolved.isResearchReady && company.price != null
-    ? company.price * (1 + resolved.activeTargets[currentScenarioId] / 100)
-    : null;
+  const fundamentals = company.fundamentals ?? {};
   const primaryValuation = getPrimaryValuationCopy(company);
+  const sourceCopy = fundamentals.source
+    ? `${fundamentals.source}${fundamentals.updatedAt ? ` refresh ${formatShortDate(fundamentals.updatedAt)}` : ""}.`
+    : "Add FMP_API_KEY and rerun the market refresh to populate this field.";
+  const fiscalCopy = fundamentals.financialDate
+    ? `Latest financial statement date: ${formatShortDate(fundamentals.financialDate)}.`
+    : sourceCopy;
+  const epsActual = fundamentals.epsActual ?? fundamentals.reportedEps;
+  const epsNote =
+    fundamentals.epsActual != null && fundamentals.epsEstimate != null
+      ? `Estimate ${formatMoney(fundamentals.epsEstimate)}; surprise ${formatPercent(fundamentals.epsSurprisePct ?? 0)}.`
+      : fundamentals.reportedEps != null
+        ? `${fiscalCopy} Analyst EPS estimate needs FMP earnings-surprise coverage.`
+        : sourceCopy;
+  const targetRange =
+    fundamentals.analystTargetLow != null && fundamentals.analystTargetHigh != null
+      ? `Range ${formatMoney(fundamentals.analystTargetLow)} - ${formatMoney(fundamentals.analystTargetHigh)}.`
+      : fundamentals.analystTargetCount != null
+        ? `${formatNumber(fundamentals.analystTargetCount, 0)} target observations.`
+        : "Requires FMP price-target summary coverage.";
 
   return [
     {
-      label: primaryValuation.label,
-      value: primaryValuation.value,
-      note: primaryValuation.note,
-    },
-    {
-      label: "52W range",
+      label: "Market cap",
       value:
-        company.fiftyTwoWeekLow != null && company.fiftyTwoWeekHigh != null
-          ? `${formatMoney(company.fiftyTwoWeekLow)} - ${formatMoney(company.fiftyTwoWeekHigh)}`
-          : "Pending range feed",
-      note:
-        rangePosition == null
-          ? "Automatic range metrics appear once price-history enrichment is available."
-          : `${Math.round(rangePosition)}% through the 52-week range.`,
+        fundamentals.marketCap == null
+          ? "Pending FMP"
+          : formatCompactNumber(fundamentals.marketCap, { currency: true }),
+      note: fundamentals.marketCap == null ? sourceCopy : "Company size from the FMP fundamentals layer.",
     },
     {
-      label: "3M performance",
-      value: company.threeMonthReturn == null ? "Pending" : formatPercent(company.threeMonthReturn),
-      note:
-        company.sixMonthReturn == null
-          ? "6M trend will populate when market-history metrics are attached."
-          : `6M move: ${formatPercent(company.sixMonthReturn)}.`,
-    },
-    {
-      label: "Avg daily $ volume",
+      label: "P/E ratio",
       value:
-        company.avgDailyDollarVolume == null
-          ? company.liquidityBucket ?? "Pending"
-          : formatCompactNumber(company.avgDailyDollarVolume, { currency: true }),
-      note: `Liquidity profile: ${company.liquidityBucket ?? resolved.meta.coverage}.`,
-    },
-    {
-      label: "Next earnings",
-      value: "Pending feed",
-      note: "This slot is ready for the earnings calendar once the fundamentals layer is attached.",
-    },
-    {
-      label: "EPS surprise",
-      value: "Pending feed",
+        fundamentals.trailingPe == null
+          ? "Pending FMP"
+          : formatMultiple(fundamentals.trailingPe),
       note:
-        target == null
-          ? "Target modeling is price-based right now; EPS fields arrive with the fundamentals feed."
-          : `Current ${titleCase(currentScenarioId)} target: ${formatMoney(target)}.`,
+        fundamentals.trailingPe == null
+          ? primaryValuation.note
+          : `${primaryValuation.value} context. FMP TTM earnings multiple.`,
+    },
+    {
+      label: "EPS actual vs est.",
+      value:
+        epsActual == null
+          ? "Pending FMP"
+          : `${formatMoney(epsActual)}${fundamentals.epsEstimate == null ? "" : ` / ${formatMoney(fundamentals.epsEstimate)}`}`,
+      note: epsNote,
+    },
+    {
+      label: "Revenue",
+      value:
+        fundamentals.revenue == null
+          ? "Pending FMP"
+          : formatCompactNumber(fundamentals.revenue, { currency: true }),
+      note: fundamentals.revenue == null ? sourceCopy : fiscalCopy,
+    },
+    {
+      label: "Net income",
+      value:
+        fundamentals.netIncome == null
+          ? "Pending FMP"
+          : formatCompactNumber(fundamentals.netIncome, { currency: true }),
+      note:
+        fundamentals.netIncome == null
+          ? sourceCopy
+          : fundamentals.netMarginPct == null
+            ? fiscalCopy
+            : `Net margin ${formatPercent(fundamentals.netMarginPct)}. ${fiscalCopy}`,
+    },
+    {
+      label: "Analyst target",
+      value:
+        fundamentals.analystTarget == null
+          ? "Pending FMP"
+          : formatMoney(fundamentals.analystTarget),
+      note:
+        fundamentals.analystTarget == null
+          ? "The model target still works; this adds sell-side target context when FMP provides it."
+          : targetRange,
     },
   ];
 }
@@ -2360,6 +2419,7 @@ function renderCompany(id) {
   );
 
   const factList = document.querySelector("#company-facts");
+  const fundamentals = company.fundamentals ?? {};
   factList.replaceChildren(
     ...[
       `Ticker: ${company.ticker}`,
@@ -2376,6 +2436,15 @@ function renderCompany(id) {
       company.avgDailyDollarVolume != null
         ? `Avg daily dollar volume: ${formatCompactNumber(company.avgDailyDollarVolume, { currency: true })}`
         : "Avg daily dollar volume: Pending enrichment",
+      fundamentals.source
+        ? `Fundamentals source: ${fundamentals.source}`
+        : "Fundamentals source: Add FMP_API_KEY and rerun refresh",
+      fundamentals.trailingPe != null
+        ? `Trailing P/E: ${formatMultiple(fundamentals.trailingPe)}`
+        : "Trailing P/E: Pending FMP enrichment",
+      fundamentals.reportedEps != null || fundamentals.epsActual != null
+        ? `EPS: ${formatMoney(fundamentals.epsActual ?? fundamentals.reportedEps)}${fundamentals.epsEstimate == null ? "" : ` vs estimate ${formatMoney(fundamentals.epsEstimate)}`}`
+        : "EPS actual vs estimate: Pending FMP enrichment",
       resolved.isResearchReady
         ? `${titleCase(currentScenarioId)} target (${getMethodById(resolved.effectiveMethodId).label}): ${formatMoney(activeScenarioTarget)}`
         : "Scenario targets: Pending price and valuation enrichment",

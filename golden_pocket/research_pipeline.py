@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import concurrent.futures
 import json
 import math
+import os
 import time
 import urllib.parse
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from io import StringIO
 from pathlib import Path
 from statistics import median
 from typing import Any, Iterable
@@ -17,6 +20,7 @@ from urllib.request import Request, urlopen
 from golden_pocket.market_pipeline import DEFAULT_USER_AGENT
 
 YAHOO_SPARK_URL = "https://query1.finance.yahoo.com/v7/finance/spark"
+FMP_STABLE_BASE_URL = "https://financialmodelingprep.com/stable"
 VALID_INSTRUMENT_TYPES = {"EQUITY", "ETF"}
 
 
@@ -107,6 +111,22 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Ignore cache freshness and pull fresh market data.",
     )
+    parser.add_argument(
+        "--fmp-api-key",
+        default=os.environ.get("FMP_API_KEY"),
+        help="Optional Financial Modeling Prep API key. Defaults to FMP_API_KEY from the environment.",
+    )
+    parser.add_argument(
+        "--fmp-cache-hours",
+        type=float,
+        default=24.0,
+        help="How long cached FMP fundamentals stay fresh before refresh.",
+    )
+    parser.add_argument(
+        "--skip-fmp",
+        action="store_true",
+        help="Skip Financial Modeling Prep fundamentals enrichment even when an API key is present.",
+    )
     return parser
 
 
@@ -150,6 +170,23 @@ def load_cached_price_payload(
 def write_cache(cache_path: Path, payload: dict[str, Any]) -> None:
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache_path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def write_cache_rows(cache_path: Path, rows: list[dict[str, Any]]) -> None:
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps(rows), encoding="utf-8")
+
+
+def load_cached_rows(
+    cache_path: Path, cache_hours: float, force_refresh: bool
+) -> list[dict[str, Any]] | None:
+    if force_refresh or not cache_is_fresh(cache_path, cache_hours):
+        return None
+    try:
+        payload = json.loads(cache_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, list) else None
 
 
 def fetch_spark_batch(
@@ -233,6 +270,333 @@ def ensure_price_history(
             if index == len(futures) or index % 50 == 0:
                 print(f"Fetched batched market data for {index}/{len(futures)} request groups...")
     return resolved
+
+
+def parse_fmp_response(body: str) -> list[dict[str, Any]]:
+    stripped = body.strip()
+    if not stripped:
+        return []
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        reader = csv.DictReader(StringIO(stripped))
+        return [dict(row) for row in reader]
+    if isinstance(payload, list):
+        return [row for row in payload if isinstance(row, dict)]
+    if isinstance(payload, dict):
+        if isinstance(payload.get("data"), list):
+            return [row for row in payload["data"] if isinstance(row, dict)]
+        if isinstance(payload.get("error"), str):
+            print(f"FMP returned an error: {payload['error']}")
+        return [payload]
+    return []
+
+
+def fmp_cache_name(endpoint: str, params: dict[str, Any]) -> str:
+    safe_endpoint = endpoint.replace("/", "_").replace("-", "_")
+    param_suffix = "_".join(
+        f"{key}_{str(value).replace('/', '_')}" for key, value in sorted(params.items())
+    )
+    return f"{safe_endpoint}{'_' + param_suffix if param_suffix else ''}.json"
+
+
+def fetch_fmp_rows(
+    *,
+    endpoint: str,
+    api_key: str,
+    params: dict[str, Any] | None,
+    cache_dir: Path,
+    cache_hours: float,
+    timeout: float,
+    force_refresh: bool,
+) -> list[dict[str, Any]]:
+    params = dict(params or {})
+    cache_path = cache_dir / "fmp" / fmp_cache_name(endpoint, params)
+    cached = load_cached_rows(cache_path, cache_hours, force_refresh)
+    if cached is not None:
+        return cached
+
+    query = urllib.parse.urlencode({**params, "apikey": api_key})
+    url = f"{FMP_STABLE_BASE_URL}/{endpoint}?{query}"
+    request = Request(
+        url,
+        headers={
+            "User-Agent": DEFAULT_USER_AGENT,
+            "Accept": "application/json,text/csv;q=0.9,*/*;q=0.8",
+        },
+    )
+    with urlopen(request, timeout=timeout) as response:
+        body = response.read().decode("utf-8")
+
+    rows = parse_fmp_response(body)
+    write_cache_rows(cache_path, rows)
+    return rows
+
+
+def build_symbol_map(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    mapped: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        symbol = row.get("symbol") or row.get("ticker")
+        if not symbol:
+            continue
+        mapped[str(symbol).upper()] = row
+    return mapped
+
+
+def build_latest_symbol_map(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    mapped: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        symbol = row.get("symbol") or row.get("ticker")
+        if not symbol:
+            continue
+        key = str(symbol).upper()
+        existing = mapped.get(key)
+        if existing is None or str(row.get("date") or "") > str(existing.get("date") or ""):
+            mapped[key] = row
+    return mapped
+
+
+def symbol_variants(ticker: str) -> list[str]:
+    symbol = ticker.upper()
+    variants = [symbol]
+    if "-" in symbol:
+        variants.append(symbol.replace("-", "."))
+    if "." in symbol:
+        variants.append(symbol.replace(".", "-"))
+    return list(dict.fromkeys(variants))
+
+
+def find_symbol_row(mapping: dict[str, dict[str, Any]], ticker: str) -> dict[str, Any]:
+    for variant in symbol_variants(ticker):
+        if variant in mapping:
+            return mapping[variant]
+    return {}
+
+
+def parse_number(value: Any) -> float | None:
+    if value in (None, "", "None", "null", "NaN"):
+        return None
+    if isinstance(value, (int, float)):
+        numeric = float(value)
+    else:
+        try:
+            numeric = float(str(value).replace(",", ""))
+        except ValueError:
+            return None
+    if math.isnan(numeric) or math.isinf(numeric):
+        return None
+    return numeric
+
+
+def first_number(row: dict[str, Any], keys: list[str]) -> float | None:
+    for key in keys:
+        if key in row:
+            numeric = parse_number(row.get(key))
+            if numeric is not None:
+                return numeric
+    return None
+
+
+def first_text(row: dict[str, Any], keys: list[str]) -> str | None:
+    for key in keys:
+        value = row.get(key)
+        if value not in (None, ""):
+            return str(value)
+    return None
+
+
+def rounded(value: float | None, digits: int = 2) -> float | None:
+    if value is None:
+        return None
+    return round(value, digits)
+
+
+def compact_fundamentals(payload: dict[str, Any]) -> dict[str, Any] | None:
+    cleaned = {key: value for key, value in payload.items() if value not in (None, "", [])}
+    return cleaned or None
+
+
+def build_fmp_fundamentals(
+    records: list[dict[str, Any]],
+    metrics_by_ticker: dict[str, TickerMetrics],
+    *,
+    cache_dir: Path,
+    api_key: str | None,
+    cache_hours: float,
+    timeout: float,
+    force_refresh: bool,
+    generated_at: str,
+) -> dict[str, dict[str, Any]]:
+    if not api_key:
+        return {}
+
+    target_year = datetime.now(UTC).year - 1
+    datasets: dict[str, list[dict[str, Any]]] = {}
+    dataset_specs = [
+        ("key_metrics_ttm", "key-metrics-ttm-bulk", {}),
+        ("ratios_ttm", "ratios-ttm-bulk", {}),
+        ("income_statement", "income-statement-bulk", {"year": target_year, "period": "annual"}),
+        ("income_statement_prev", "income-statement-bulk", {"year": target_year - 1, "period": "annual"}),
+        ("earnings_surprises", "earnings-surprises-bulk", {"year": target_year}),
+        ("earnings_surprises_prev", "earnings-surprises-bulk", {"year": target_year - 1}),
+        ("price_target_summary", "price-target-summary-bulk", {}),
+    ]
+
+    for label, endpoint, params in dataset_specs:
+        try:
+            datasets[label] = fetch_fmp_rows(
+                endpoint=endpoint,
+                api_key=api_key,
+                params=params,
+                cache_dir=cache_dir,
+                cache_hours=cache_hours,
+                timeout=timeout,
+                force_refresh=force_refresh,
+            )
+            print(f"Loaded FMP {label}: {len(datasets[label])} rows.")
+        except (HTTPError, URLError, OSError, json.JSONDecodeError, TimeoutError) as error:
+            print(f"Skipped FMP {label}: {error}")
+            datasets[label] = []
+
+    key_metrics = build_symbol_map(datasets["key_metrics_ttm"])
+    ratios = build_symbol_map(datasets["ratios_ttm"])
+    income_rows = datasets["income_statement"] or datasets["income_statement_prev"]
+    income = build_latest_symbol_map(income_rows)
+    earnings = build_latest_symbol_map(
+        datasets["earnings_surprises"] + datasets["earnings_surprises_prev"]
+    )
+    price_targets = build_symbol_map(datasets["price_target_summary"])
+
+    fundamentals_by_ticker: dict[str, dict[str, Any]] = {}
+    for record in records:
+        ticker = record["ticker"]
+        metric = metrics_by_ticker.get(ticker)
+        if not metric:
+            continue
+
+        metrics_row = find_symbol_row(key_metrics, ticker)
+        ratios_row = find_symbol_row(ratios, ticker)
+        income_row = find_symbol_row(income, ticker)
+        earnings_row = find_symbol_row(earnings, ticker)
+        target_row = find_symbol_row(price_targets, ticker)
+
+        market_cap = first_number(
+            metrics_row,
+            ["marketCapTTM", "marketCap", "mktCap", "enterpriseValueTTM"],
+        )
+        pe_ttm = first_number(
+            metrics_row,
+            ["peRatioTTM", "peRatio", "priceEarningsRatioTTM", "priceEarningsRatio"],
+        )
+        price_to_sales = first_number(
+            metrics_row,
+            ["priceToSalesRatioTTM", "priceToSalesRatio", "priceSalesRatioTTM"],
+        )
+        ev_to_ebitda = first_number(
+            metrics_row,
+            ["enterpriseValueOverEBITDATTM", "evToEBITDATTM", "evToEbitdaTTM"],
+        )
+        revenue = first_number(
+            income_row,
+            ["revenue", "reportedRevenue", "totalRevenue"],
+        )
+        net_income = first_number(income_row, ["netIncome", "netIncomeLoss"])
+        eps_reported = first_number(
+            income_row,
+            ["epsdiluted", "epsDiluted", "eps", "reportedEPS"],
+        )
+        eps_actual = first_number(
+            earnings_row,
+            ["actualEarningResult", "actualEps", "actualEPS", "epsActual"],
+        )
+        eps_estimate = first_number(
+            earnings_row,
+            ["estimatedEarning", "estimatedEps", "estimatedEPS", "epsEstimated"],
+        )
+        analyst_target = first_number(
+            target_row,
+            [
+                "lastMonthAvgPriceTarget",
+                "lastQuarterAvgPriceTarget",
+                "lastYearAvgPriceTarget",
+                "allTimeAvgPriceTarget",
+                "priceTarget",
+                "targetConsensus",
+            ],
+        )
+        analyst_target_high = first_number(
+            target_row,
+            [
+                "lastMonthHighPriceTarget",
+                "lastQuarterHighPriceTarget",
+                "lastYearHighPriceTarget",
+                "priceTargetHigh",
+                "targetHigh",
+            ],
+        )
+        analyst_target_low = first_number(
+            target_row,
+            [
+                "lastMonthLowPriceTarget",
+                "lastQuarterLowPriceTarget",
+                "lastYearLowPriceTarget",
+                "priceTargetLow",
+                "targetLow",
+            ],
+        )
+        analyst_target_count = first_number(
+            target_row,
+            ["lastMonthCount", "lastQuarterCount", "lastYearCount", "numberOfAnalysts"],
+        )
+
+        eps_surprise_pct = None
+        if eps_actual is not None and eps_estimate not in (None, 0):
+            eps_surprise_pct = ((eps_actual - eps_estimate) / abs(eps_estimate)) * 100.0
+
+        net_margin = None
+        if revenue not in (None, 0) and net_income is not None:
+            net_margin = net_income / revenue * 100.0
+
+        debt_to_equity = first_number(
+            ratios_row,
+            ["debtEquityRatioTTM", "debtToEquityRatioTTM", "debtEquityRatio"],
+        )
+        return_on_equity = first_number(
+            ratios_row,
+            ["returnOnEquityTTM", "roeTTM", "returnOnEquity"],
+        )
+
+        fundamentals = compact_fundamentals(
+            {
+                "source": "Financial Modeling Prep",
+                "updatedAt": generated_at,
+                "fiscalYear": first_text(income_row, ["calendarYear", "year"]),
+                "fiscalPeriod": first_text(income_row, ["period"]),
+                "financialDate": first_text(income_row, ["date", "acceptedDate", "fillingDate"]),
+                "earningsDate": first_text(earnings_row, ["date"]),
+                "marketCap": rounded(market_cap, 0),
+                "trailingPe": rounded(pe_ttm, 2),
+                "priceToSales": rounded(price_to_sales, 2),
+                "evToEbitda": rounded(ev_to_ebitda, 2),
+                "revenue": rounded(revenue, 0),
+                "netIncome": rounded(net_income, 0),
+                "netMarginPct": rounded(net_margin, 2),
+                "reportedEps": rounded(eps_reported, 3),
+                "epsActual": rounded(eps_actual, 3),
+                "epsEstimate": rounded(eps_estimate, 3),
+                "epsSurprisePct": rounded(eps_surprise_pct, 2),
+                "debtToEquity": rounded(debt_to_equity, 2),
+                "returnOnEquityPct": rounded(return_on_equity, 2),
+                "analystTarget": rounded(analyst_target, 2),
+                "analystTargetHigh": rounded(analyst_target_high, 2),
+                "analystTargetLow": rounded(analyst_target_low, 2),
+                "analystTargetCount": rounded(analyst_target_count, 0),
+            }
+        )
+        if fundamentals:
+            fundamentals_by_ticker[ticker] = fundamentals
+
+    return fundamentals_by_ticker
 
 
 def latest_valid(values: list[Any]) -> float | None:
@@ -555,6 +919,7 @@ def generate_profile(
     sector_context: dict[str, dict[str, float]],
     global_context: dict[str, float],
     generated_at: str,
+    fundamentals: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     scores = build_scores(metric, sector_context, global_context)
     targets = build_targets(metric, scores, sector_context, global_context)
@@ -567,7 +932,7 @@ def generate_profile(
     )
     above_low_pct = ((metric.price / metric.low_52w) - 1.0) * 100.0 if metric.low_52w > 0 else 0.0
 
-    return {
+    profile = {
         "id": record["id"],
         "ticker": record["ticker"],
         "name": record["name"],
@@ -604,6 +969,9 @@ def generate_profile(
         "avgDailyDollarVolume": round(metric.liquidity_estimate, 2),
         "generatedAt": generated_at,
     }
+    if fundamentals:
+        profile["fundamentals"] = fundamentals
+    return profile
 
 
 def load_universe(path: Path) -> list[dict[str, Any]]:
@@ -634,6 +1002,9 @@ def build_research_profiles(
     pause_seconds: float,
     limit: int | None,
     force_refresh: bool,
+    fmp_api_key: str | None = None,
+    fmp_cache_hours: float = 24.0,
+    skip_fmp: bool = False,
 ) -> dict[str, Any]:
     universe = load_universe(universe_path)
     if limit is not None:
@@ -683,6 +1054,20 @@ def build_research_profiles(
 
     sector_context, global_context = compute_sector_context(metrics)
     metrics_by_ticker = {metric.ticker: metric for metric in metrics}
+    fundamentals_by_ticker = (
+        {}
+        if skip_fmp
+        else build_fmp_fundamentals(
+            universe,
+            metrics_by_ticker,
+            cache_dir=cache_dir,
+            api_key=fmp_api_key,
+            cache_hours=fmp_cache_hours,
+            timeout=timeout,
+            force_refresh=force_refresh,
+            generated_at=generated_at,
+        )
+    )
     profiles = [
         generate_profile(
             record,
@@ -690,6 +1075,7 @@ def build_research_profiles(
             sector_context,
             global_context,
             generated_at,
+            fundamentals_by_ticker.get(record["ticker"]),
         )
         for record in universe
         if record["ticker"] in metrics_by_ticker
@@ -707,9 +1093,11 @@ def build_research_profiles(
             "marketHistory": YAHOO_SPARK_URL,
             "notes": [
                 "Generated market profiles are built automatically from 1-year daily price history plus the SEC-based universe directory.",
+                "When FMP_API_KEY is configured, fundamentals are enriched from Financial Modeling Prep bulk datasets without exposing the API key in the static webpage.",
                 "These are model-generated targets, not human-authored investment theses and not sell-side analyst price targets.",
                 "Deep research pilot profiles can still override these automated outputs where richer manual work exists.",
             ],
+            "fundamentals": "Financial Modeling Prep" if fundamentals_by_ticker else "Not configured",
         },
         "stats": stats,
         "profiles": sorted(profiles, key=lambda item: item["ticker"]),
@@ -739,6 +1127,9 @@ def main() -> int:
         pause_seconds=args.pause_seconds,
         limit=args.limit,
         force_refresh=args.force_refresh,
+        fmp_api_key=args.fmp_api_key,
+        fmp_cache_hours=args.fmp_cache_hours,
+        skip_fmp=args.skip_fmp,
     )
     return 0
 
