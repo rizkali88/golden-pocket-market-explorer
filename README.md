@@ -73,6 +73,29 @@ python analyze.py --input data/sample_sector_snapshot.csv --format markdown --ou
 
 To open the interactive pilot webpage, load [webapp/index.html](/C:/Users/aliri/OneDrive/Documents/New%20project%202/webapp/index.html) in a browser.
 
+## Cloud Webapp Access
+
+The repository includes a GitHub Actions workflow at `.github/workflows/refresh-and-deploy.yml` that can publish `webapp/` to GitHub Pages.
+
+Once GitHub Pages is enabled with `GitHub Actions` as the publishing source, the live dashboard URL will be:
+
+```text
+https://rizkali88.github.io/golden-pocket-market-explorer/
+```
+
+The workflow:
+
+- deploys the static webapp after pushes to `main`
+- can be run manually from the GitHub `Actions` tab
+- refreshes generated market data automatically Tuesday-Saturday at `02:30 UTC`, which is `06:30 Asia/Dubai`
+
+To enable the site in GitHub:
+
+1. Open the repository on GitHub.
+2. Go to `Settings` -> `Pages`.
+3. Set `Build and deployment` -> `Source` to `GitHub Actions`.
+4. Open the `Actions` tab and run `Refresh Market Data And Deploy Webapp`.
+
 ## Full-Market Ingestion Pipeline
 
 The webapp can now ingest a broad SEC-backed ticker universe instead of relying on a hardcoded list.

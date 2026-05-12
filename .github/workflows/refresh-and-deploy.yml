@@ -1,0 +1,90 @@
+name: Refresh Market Data And Deploy Webapp
+
+on:
+  workflow_dispatch:
+  schedule:
+    # GitHub schedules use UTC. This runs Tue-Sat at 06:30 Dubai time,
+    # after the prior US trading session has closed and daily data is available.
+    - cron: "30 2 * * 2-6"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/refresh-and-deploy.yml"
+      - "build_market_system.py"
+      - "build_market_universe.py"
+      - "build_research_profiles.py"
+      - "golden_pocket/**"
+      - "webapp/**"
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Refresh Data And Package Site
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Refresh generated market data
+        if: github.event_name != 'push'
+        run: |
+          python build_market_system.py \
+            --output-dir webapp/data \
+            --universe-cache-dir data/sec_cache \
+            --research-cache-dir data/research_cache \
+            --user-agent "GoldenPocketLab github-actions@users.noreply.github.com" \
+            --requests-per-second 8 \
+            --universe-workers 8 \
+            --research-workers 4 \
+            --research-batch-size 20 \
+            --research-pause-seconds 0.25
+
+      - name: Commit refreshed generated data
+        if: github.event_name != 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add webapp/data/market_universe.js webapp/data/market_universe.json
+          git add webapp/data/research_profiles.js webapp/data/research_profiles.json
+          if git diff --cached --quiet; then
+            echo "No generated data changes to commit."
+          else
+            git commit -m "Refresh generated market data"
+            git push
+          fi
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload webapp artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: webapp
+
+  deploy:
+    name: Deploy To GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy site
+        id: deployment
+        uses: actions/deploy-pages@v4
