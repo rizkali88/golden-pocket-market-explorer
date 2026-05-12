@@ -110,6 +110,32 @@ body::before {
   margin-bottom: 0;
 }
 
+.page-clone-notice {
+  display: grid;
+  gap: 10px;
+  border-color: rgba(124, 213, 207, 0.42);
+}
+
+.page-clone-notice h1 {
+  margin: 0;
+  color: var(--ink);
+  font-family: "Georgia", "Palatino Linotype", serif;
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  line-height: 0.95;
+}
+
+.page-clone-notice p {
+  max-width: 780px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.page-clone-notice a {
+  color: var(--accent);
+  font-weight: 800;
+}
+
 .report-header {
   display: grid;
   gap: 16px;
@@ -1200,6 +1226,14 @@ body::before {
   color: var(--ink);
   font-size: 1rem;
   letter-spacing: 0.02em;
+}
+
+.page-variant {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .topbar__actions {
