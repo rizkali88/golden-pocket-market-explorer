@@ -1145,6 +1145,13 @@ function setTextIfExists(selector, value) {
   }
 }
 
+function replaceChildrenIfExists(selector, ...children) {
+  const element = document.querySelector(selector);
+  if (element) {
+    element.replaceChildren(...children);
+  }
+}
+
 function addTargetShift(baseTargets, shift) {
   return {
     bear: baseTargets.bear + shift.bear,
@@ -2045,6 +2052,9 @@ function renderScenario(id, options = {}) {
 
 function buildTargetCards(company, resolved) {
   const targetWrap = document.querySelector("#company-targets");
+  if (!targetWrap) {
+    return;
+  }
   const order = [
     { key: "bear", label: "Bear" },
     { key: "base", label: "Base" },
@@ -2091,6 +2101,9 @@ function buildTargetCards(company, resolved) {
 
 function buildMethodCompare(company, resolved) {
   const compareWrap = document.querySelector("#method-compare");
+  if (!compareWrap) {
+    return;
+  }
 
   if (!resolved.isResearchReady) {
     compareWrap.replaceChildren(
@@ -2136,27 +2149,30 @@ function renderMethodFit(company, resolved) {
   const effectiveMethod = getMethodById(resolved.effectiveMethodId);
 
   if (!resolved.isResearchReady) {
-    document.querySelector("#active-method-badge").textContent = "Directory only";
-    document.querySelector("#active-method-copy").textContent =
-      "Target methods are disabled until this ticker has price and valuation inputs.";
-    document.querySelector("#method-fit-title").textContent =
-      `Research profile not loaded for ${company.ticker}`;
-    document.querySelector("#method-fit-body").textContent = resolved.meta.reason;
+    setTextIfExists("#active-method-badge", "Directory only");
+    setTextIfExists(
+      "#active-method-copy",
+      "Target methods are disabled until this ticker has price and valuation inputs.",
+    );
+    setTextIfExists("#method-fit-title", `Research profile not loaded for ${company.ticker}`);
+    setTextIfExists("#method-fit-body", resolved.meta.reason);
 
     const metaWrap = document.querySelector("#method-fit-meta");
-    metaWrap.replaceChildren(
-      ...[
-        `Mode ${isResearchReadyProfile(company) ? (company.profileMode === "deep_research" ? "Deep research" : "Model-ready") : "Directory only"}`,
-        `Sector ${company.sector}`,
-        `Exchange ${company.exchange}`,
-        `Industry ${company.industry}`,
-        `SEC source ${company.classificationSource}`,
-      ].map((text) => {
-        const chip = document.createElement("span");
-        chip.textContent = text;
-        return chip;
-      }),
-    );
+    if (metaWrap) {
+      metaWrap.replaceChildren(
+        ...[
+          `Mode ${isResearchReadyProfile(company) ? (company.profileMode === "deep_research" ? "Deep research" : "Model-ready") : "Directory only"}`,
+          `Sector ${company.sector}`,
+          `Exchange ${company.exchange}`,
+          `Industry ${company.industry}`,
+          `SEC source ${company.classificationSource}`,
+        ].map((text) => {
+          const chip = document.createElement("span");
+          chip.textContent = text;
+          return chip;
+        }),
+      );
+    }
 
     document.querySelectorAll(".method-pill").forEach((pill) => {
       pill.classList.toggle("is-active", pill.dataset.id === currentTargetMethodId);
@@ -2164,44 +2180,52 @@ function renderMethodFit(company, resolved) {
     return;
   }
 
-  document.querySelector("#active-method-badge").textContent =
+  setTextIfExists(
+    "#active-method-badge",
     resolved.requestedMethodId === "auto"
       ? `Auto -> ${effectiveMethod.label}`
-      : `Manual -> ${effectiveMethod.label}`;
-  document.querySelector("#active-method-copy").textContent = effectiveMethod.description;
+      : `Manual -> ${effectiveMethod.label}`,
+  );
+  setTextIfExists("#active-method-copy", effectiveMethod.description);
 
-  document.querySelector("#method-fit-title").textContent =
+  setTextIfExists(
+    "#method-fit-title",
     resolved.requestedMethodId === "auto"
       ? `Auto picks ${effectiveMethod.label} for ${company.ticker}`
-      : `${requestedMethod.label} view for ${company.ticker}`;
+      : `${requestedMethod.label} view for ${company.ticker}`,
+  );
 
-  document.querySelector("#method-fit-body").textContent =
+  setTextIfExists(
+    "#method-fit-body",
     resolved.requestedMethodId === "auto"
       ? resolved.meta.reason
       : resolved.effectiveMethodId === resolved.meta.recommendedMethod
         ? `This matches the recommended fit for ${company.ticker}. ${resolved.meta.reason}`
-        : `Manual override active. ${resolved.meta.reason}`;
+        : `Manual override active. ${resolved.meta.reason}`,
+  );
 
   const metaWrap = document.querySelector("#method-fit-meta");
-  metaWrap.replaceChildren(
-    ...[
-      `Coverage ${resolved.meta.coverage}`,
-      `Theme ${company.sector}`,
-      `Exchange ${company.exchangeSector}`,
-      `Industry ${company.industry}`,
-      `Recommended ${getMethodById(resolved.meta.recommendedMethod).label}`,
-      resolved.meta.methodScores
-        ? `Scores C${resolved.meta.methodScores.consensus} / V${resolved.meta.methodScores.valuation} / H${resolved.meta.methodScores.hybrid}`
-        : null,
-    ].map((text) => {
-      if (!text) {
-        return null;
-      }
-      const chip = document.createElement("span");
-      chip.textContent = text;
-      return chip;
-    }).filter(Boolean),
-  );
+  if (metaWrap) {
+    metaWrap.replaceChildren(
+      ...[
+        `Coverage ${resolved.meta.coverage}`,
+        `Theme ${company.sector}`,
+        `Exchange ${company.exchangeSector}`,
+        `Industry ${company.industry}`,
+        `Recommended ${getMethodById(resolved.meta.recommendedMethod).label}`,
+        resolved.meta.methodScores
+          ? `Scores C${resolved.meta.methodScores.consensus} / V${resolved.meta.methodScores.valuation} / H${resolved.meta.methodScores.hybrid}`
+          : null,
+      ].map((text) => {
+        if (!text) {
+          return null;
+        }
+        const chip = document.createElement("span");
+        chip.textContent = text;
+        return chip;
+      }).filter(Boolean),
+    );
+  }
 
   document.querySelectorAll(".method-pill").forEach((pill) => {
     pill.classList.toggle("is-active", pill.dataset.id === currentTargetMethodId);
@@ -2214,31 +2238,35 @@ function renderTargetMethod(id) {
 }
 
 function renderEmptyState() {
-  document.querySelector("#company-kind").textContent = "No ticker selected";
-  document.querySelector("#company-name").textContent = "No matches for the current filters";
-  document.querySelector("#company-price").textContent = "--";
-  document.querySelector("#company-date").textContent = "Adjust the top filters or clear them";
-  document.querySelector("#company-active-target").textContent = "--";
-  document.querySelector("#company-active-target-copy").textContent =
-    "Targets will repopulate as soon as a matching ticker is available.";
-  document.querySelector("#company-thesis").textContent =
-    "The explorer is working, but the current sector, industry, and search combination did not return any tickers.";
-  document.querySelector("#company-positioning").textContent =
-    "Try broadening the selection back to All Sectors or All Industries.";
-  document.querySelector("#company-chips").replaceChildren();
-  document.querySelector("#company-fundamentals").replaceChildren();
-  document.querySelector("#company-scoreboard").replaceChildren();
-  document.querySelector("#company-facts").replaceChildren();
-  document.querySelector("#company-risks").replaceChildren();
-  document.querySelector("#company-targets").replaceChildren();
-  document.querySelector("#method-compare").replaceChildren();
-  document.querySelector("#active-method-badge").textContent = "No active method";
-  document.querySelector("#active-method-copy").textContent =
-    "Target methods become available again when at least one ticker matches the filters.";
-  document.querySelector("#method-fit-title").textContent = "No method fit to evaluate";
-  document.querySelector("#method-fit-body").textContent =
-    "Method recommendations depend on an active ticker selection.";
-  document.querySelector("#method-fit-meta").replaceChildren();
+  setTextIfExists("#company-kind", "No ticker selected");
+  setTextIfExists("#company-name", "No matches for the current filters");
+  setTextIfExists("#company-price", "--");
+  setTextIfExists("#company-date", "Adjust the top filters or clear them");
+  setTextIfExists("#company-active-target", "--");
+  setTextIfExists(
+    "#company-active-target-copy",
+    "Targets will repopulate as soon as a matching ticker is available.",
+  );
+  setTextIfExists(
+    "#company-thesis",
+    "The explorer is working, but the current sector, industry, and search combination did not return any tickers.",
+  );
+  setTextIfExists("#company-positioning", "Try broadening the selection back to All Sectors or All Industries.");
+  replaceChildrenIfExists("#company-chips");
+  replaceChildrenIfExists("#company-fundamentals");
+  replaceChildrenIfExists("#company-scoreboard");
+  replaceChildrenIfExists("#company-facts");
+  replaceChildrenIfExists("#company-risks");
+  replaceChildrenIfExists("#company-targets");
+  replaceChildrenIfExists("#method-compare");
+  setTextIfExists("#active-method-badge", "No active method");
+  setTextIfExists(
+    "#active-method-copy",
+    "Target methods become available again when at least one ticker matches the filters.",
+  );
+  setTextIfExists("#method-fit-title", "No method fit to evaluate");
+  setTextIfExists("#method-fit-body", "Method recommendations depend on an active ticker selection.");
+  replaceChildrenIfExists("#method-fit-meta");
   renderAgentDashboards(null);
 }
 
@@ -3006,136 +3034,147 @@ function renderCompany(id) {
     tickerFilter.value = currentFilters.selectedTickerId;
   }
 
-  document.querySelector("#company-kind").textContent =
-    `${company.sector} | ${company.industry} | ${company.ticker}`;
-  document.querySelector("#company-name").textContent = company.name;
-  document.querySelector("#company-price").textContent =
-    company.price == null ? "Directory mode" : formatMoney(company.price);
-  document.querySelector("#company-date").textContent =
+  setTextIfExists("#company-kind", `${company.sector} | ${company.industry} | ${company.ticker}`);
+  setTextIfExists("#company-name", company.name);
+  setTextIfExists("#company-price", company.price == null ? "Directory mode" : formatMoney(company.price));
+  setTextIfExists(
+    "#company-date",
     company.price == null
       ? `${company.exchange} listing${company.cik ? ` | CIK ${company.cik}` : ""}`
-      : company.date;
-  document.querySelector("#company-thesis").textContent = company.thesis;
-  document.querySelector("#company-positioning").textContent = company.positioning;
+      : company.date,
+  );
+  setTextIfExists("#company-thesis", company.thesis);
+  setTextIfExists("#company-positioning", company.positioning);
 
   const activeScenarioTarget =
     resolved.isResearchReady && company.price != null
       ? company.price * (1 + resolved.activeTargets[currentScenarioId] / 100)
       : null;
-  document.querySelector("#company-active-target").textContent =
-    activeScenarioTarget == null ? "Pending" : formatMoney(activeScenarioTarget);
-  document.querySelector("#company-active-target-copy").textContent =
+  setTextIfExists("#company-active-target", activeScenarioTarget == null ? "Pending" : formatMoney(activeScenarioTarget));
+  setTextIfExists(
+    "#company-active-target-copy",
     activeScenarioTarget == null
       ? "Unlock this view by attaching price and research inputs to the selected ticker."
-      : `${titleCase(currentScenarioId)} case using ${getMethodById(resolved.effectiveMethodId).label}: ${formatPercent(resolved.activeTargets[currentScenarioId])} from current price.`;
+      : `${titleCase(currentScenarioId)} case using ${getMethodById(resolved.effectiveMethodId).label}: ${formatPercent(resolved.activeTargets[currentScenarioId])} from current price.`,
+  );
 
   const chipWrap = document.querySelector("#company-chips");
-  chipWrap.replaceChildren(
-    ...[
-      { text: company.sector },
-      { text: company.industry },
-      { text: company.focus },
-      isResearchReadyProfile(company)
-        ? { text: "Research-ready", className: "profile-badge profile-badge--research" }
-        : { text: "Directory-only", className: "profile-badge profile-badge--directory" },
-      company.oneYearReturn == null ? null : { text: `1Y return ${formatPercent(company.oneYearReturn)}` },
-      company.threeMonthReturn == null ? null : { text: `3M ${formatPercent(company.threeMonthReturn)}` },
-      resolved.isResearchReady
-        ? { text: `Recommended ${getMethodById(resolved.meta.recommendedMethod).label}` }
-        : { text: "Targets pending enrichment" },
-    ]
-      .filter(Boolean)
-      .map((item) => {
-        const chip = document.createElement("span");
-        chip.textContent = item.text;
-        if (item.className) {
-          chip.className = item.className;
-        }
-        return chip;
-      }),
-  );
+  if (chipWrap) {
+    chipWrap.replaceChildren(
+      ...[
+        { text: company.sector },
+        { text: company.industry },
+        { text: company.focus },
+        isResearchReadyProfile(company)
+          ? { text: "Research-ready", className: "profile-badge profile-badge--research" }
+          : { text: "Directory-only", className: "profile-badge profile-badge--directory" },
+        company.oneYearReturn == null ? null : { text: `1Y return ${formatPercent(company.oneYearReturn)}` },
+        company.threeMonthReturn == null ? null : { text: `3M ${formatPercent(company.threeMonthReturn)}` },
+        resolved.isResearchReady
+          ? { text: `Recommended ${getMethodById(resolved.meta.recommendedMethod).label}` }
+          : { text: "Targets pending enrichment" },
+      ]
+        .filter(Boolean)
+        .map((item) => {
+          const chip = document.createElement("span");
+          chip.textContent = item.text;
+          if (item.className) {
+            chip.className = item.className;
+          }
+          return chip;
+        }),
+    );
+  }
 
   const fundamentalsWrap = document.querySelector("#company-fundamentals");
-  fundamentalsWrap.replaceChildren(
-    ...buildFundamentalItems(company, resolved, opportunity).map((item) => {
-      const card = document.createElement("article");
-      card.className = "fundamentals-item";
-      card.innerHTML = `
-        <span>${item.label}</span>
-        <strong>${item.value}</strong>
-        <small>${item.note}</small>
-      `;
-      return card;
-    }),
-  );
+  if (fundamentalsWrap) {
+    fundamentalsWrap.replaceChildren(
+      ...buildFundamentalItems(company, resolved, opportunity).map((item) => {
+        const card = document.createElement("article");
+        card.className = "fundamentals-item";
+        card.innerHTML = `
+          <span>${item.label}</span>
+          <strong>${item.value}</strong>
+          <small>${item.note}</small>
+        `;
+        return card;
+      }),
+    );
+  }
 
   const factList = document.querySelector("#company-facts");
   const fundamentals = company.fundamentals ?? {};
-  factList.replaceChildren(
-    ...[
-      `Ticker: ${company.ticker}`,
-      `Exchange: ${company.exchange}`,
-      `CIK: ${company.cik ?? "Not loaded"}`,
-      `Explorer sector: ${company.sector}`,
-      `Exchange classification: ${company.exchangeSector}`,
-      `Industry: ${company.industry}`,
-      company.sicDescription ? `SEC SIC: ${company.sicDescription}` : "SEC SIC: Pending enrichment",
-      `Coverage profile: ${resolved.meta.coverage}`,
-      company.fiftyTwoWeekLow != null && company.fiftyTwoWeekHigh != null
-        ? `52W range: ${formatMoney(company.fiftyTwoWeekLow)} to ${formatMoney(company.fiftyTwoWeekHigh)}`
-        : "52W range: Pending enrichment",
-      company.avgDailyDollarVolume != null
-        ? `Avg daily dollar volume: ${formatCompactNumber(company.avgDailyDollarVolume, { currency: true })}`
-        : "Avg daily dollar volume: Pending enrichment",
-      fundamentals.source
-        ? `Fundamentals source: ${fundamentals.source}`
-        : "Fundamentals source: Add FMP_API_KEY and rerun refresh",
-      fundamentals.trailingPe != null
-        ? `Trailing P/E: ${formatMultiple(fundamentals.trailingPe)}`
-        : "Trailing P/E: Pending FMP enrichment",
-      fundamentals.reportedEps != null || fundamentals.epsActual != null
-        ? `EPS: ${formatMoney(fundamentals.epsActual ?? fundamentals.reportedEps)}${fundamentals.epsEstimate == null ? "" : ` vs estimate ${formatMoney(fundamentals.epsEstimate)}`}`
-        : "EPS actual vs estimate: Pending FMP enrichment",
-      resolved.isResearchReady
-        ? `${titleCase(currentScenarioId)} target (${getMethodById(resolved.effectiveMethodId).label}): ${formatMoney(activeScenarioTarget)}`
-        : "Scenario targets: Pending price and valuation enrichment",
-    ].map((fact) => {
-      const item = document.createElement("li");
-      item.textContent = fact;
-      return item;
-    }),
-  );
+  if (factList) {
+    factList.replaceChildren(
+      ...[
+        `Ticker: ${company.ticker}`,
+        `Exchange: ${company.exchange}`,
+        `CIK: ${company.cik ?? "Not loaded"}`,
+        `Explorer sector: ${company.sector}`,
+        `Exchange classification: ${company.exchangeSector}`,
+        `Industry: ${company.industry}`,
+        company.sicDescription ? `SEC SIC: ${company.sicDescription}` : "SEC SIC: Pending enrichment",
+        `Coverage profile: ${resolved.meta.coverage}`,
+        company.fiftyTwoWeekLow != null && company.fiftyTwoWeekHigh != null
+          ? `52W range: ${formatMoney(company.fiftyTwoWeekLow)} to ${formatMoney(company.fiftyTwoWeekHigh)}`
+          : "52W range: Pending enrichment",
+        company.avgDailyDollarVolume != null
+          ? `Avg daily dollar volume: ${formatCompactNumber(company.avgDailyDollarVolume, { currency: true })}`
+          : "Avg daily dollar volume: Pending enrichment",
+        fundamentals.source
+          ? `Fundamentals source: ${fundamentals.source}`
+          : "Fundamentals source: Add FMP_API_KEY and rerun refresh",
+        fundamentals.trailingPe != null
+          ? `Trailing P/E: ${formatMultiple(fundamentals.trailingPe)}`
+          : "Trailing P/E: Pending FMP enrichment",
+        fundamentals.reportedEps != null || fundamentals.epsActual != null
+          ? `EPS: ${formatMoney(fundamentals.epsActual ?? fundamentals.reportedEps)}${fundamentals.epsEstimate == null ? "" : ` vs estimate ${formatMoney(fundamentals.epsEstimate)}`}`
+          : "EPS actual vs estimate: Pending FMP enrichment",
+        resolved.isResearchReady
+          ? `${titleCase(currentScenarioId)} target (${getMethodById(resolved.effectiveMethodId).label}): ${formatMoney(activeScenarioTarget)}`
+          : "Scenario targets: Pending price and valuation enrichment",
+      ].map((fact) => {
+        const item = document.createElement("li");
+        item.textContent = fact;
+        return item;
+      }),
+    );
+  }
 
   const riskList = document.querySelector("#company-risks");
-  riskList.replaceChildren(
-    ...company.risks.map((risk) => {
-      const item = document.createElement("li");
-      item.textContent = risk;
-      return item;
-    }),
-  );
+  if (riskList) {
+    riskList.replaceChildren(
+      ...company.risks.map((risk) => {
+        const item = document.createElement("li");
+        item.textContent = risk;
+        return item;
+      }),
+    );
+  }
 
   const scoreboard = document.querySelector("#company-scoreboard");
-  scoreboard.replaceChildren(
-    ...[
-      { label: "Opportunity score", value: opportunity.opportunityScore },
-      ...company.scores.filter((score) => score.label.toLowerCase() !== "confidence"),
-      { label: "Confidence", value: opportunity.confidenceScore },
-    ].map((score) => {
-      const row = document.createElement("div");
-      row.className = "score-row";
-      row.innerHTML = `
-        <div class="score-row__header">
-          <span>${score.label}</span>
-          <strong>${score.value}</strong>
-        </div>
-        <div class="bar__track">
-          <div class="bar__fill" style="width:${score.value}%"></div>
-        </div>
-      `;
-      return row;
-    }),
-  );
+  if (scoreboard) {
+    scoreboard.replaceChildren(
+      ...[
+        { label: "Opportunity score", value: opportunity.opportunityScore },
+        ...company.scores.filter((score) => score.label.toLowerCase() !== "confidence"),
+        { label: "Confidence", value: opportunity.confidenceScore },
+      ].map((score) => {
+        const row = document.createElement("div");
+        row.className = "score-row";
+        row.innerHTML = `
+          <div class="score-row__header">
+            <span>${score.label}</span>
+            <strong>${score.value}</strong>
+          </div>
+          <div class="bar__track">
+            <div class="bar__fill" style="width:${score.value}%"></div>
+          </div>
+        `;
+        return row;
+      }),
+    );
+  }
 
   buildTargetCards(company, resolved);
   buildMethodCompare(company, resolved);
