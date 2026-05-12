@@ -1580,6 +1580,16 @@ html[data-theme="dark"] .filter-field option {
   overflow: visible;
 }
 
+@media (max-width: 760px) {
+  .sidebar.panel {
+    position: static;
+    width: auto;
+    max-height: none;
+    overflow: visible;
+    z-index: auto;
+  }
+}
+
 .ticker-combobox {
   position: relative;
 }
