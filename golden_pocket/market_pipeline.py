@@ -16,7 +16,7 @@ from urllib.request import Request, urlopen
 
 SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers_exchange.json"
 SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
-DEFAULT_USER_AGENT = "GoldenPocketLab research@local.dev"
+DEFAULT_USER_AGENT = "GoldenPocketMarketExplorer/1.0 contact rizkali@gmail.com"
 
 
 @dataclass(frozen=True)
@@ -82,13 +82,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--requests-per-second",
         type=float,
-        default=8.0,
+        default=4.0,
         help="Target SEC request rate. Keep this below the SEC max of 10 req/sec.",
     )
     parser.add_argument(
         "--max-workers",
         type=int,
-        default=8,
+        default=4,
         help="Concurrent submission fetch workers.",
     )
     parser.add_argument(

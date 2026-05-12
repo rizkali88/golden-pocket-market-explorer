@@ -14,12 +14,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", default="webapp/data")
     parser.add_argument("--universe-cache-dir", default="data/sec_cache")
     parser.add_argument("--research-cache-dir", default="data/research_cache")
-    parser.add_argument("--user-agent", default="GoldenPocketLab research@local.dev")
+    parser.add_argument(
+        "--user-agent",
+        default="GoldenPocketMarketExplorer/1.0 contact rizkali@gmail.com",
+    )
     parser.add_argument("--universe-cache-hours", type=float, default=168.0)
     parser.add_argument("--research-cache-hours", type=float, default=24.0)
     parser.add_argument("--timeout", type=float, default=25.0)
-    parser.add_argument("--requests-per-second", type=float, default=8.0)
-    parser.add_argument("--universe-workers", type=int, default=8)
+    parser.add_argument("--requests-per-second", type=float, default=4.0)
+    parser.add_argument("--universe-workers", type=int, default=4)
     parser.add_argument("--research-workers", type=int, default=4)
     parser.add_argument("--research-batch-size", type=int, default=20)
     parser.add_argument("--research-pause-seconds", type=float, default=0.25)

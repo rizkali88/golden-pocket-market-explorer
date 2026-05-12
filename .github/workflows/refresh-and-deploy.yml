@@ -41,21 +41,23 @@ jobs:
           python-version: "3.12"
 
       - name: Refresh generated market data
+        id: refresh
         if: github.event_name != 'push'
+        continue-on-error: true
         run: |
           python build_market_system.py \
             --output-dir webapp/data \
             --universe-cache-dir data/sec_cache \
             --research-cache-dir data/research_cache \
-            --user-agent "GoldenPocketLab github-actions@users.noreply.github.com" \
-            --requests-per-second 8 \
-            --universe-workers 8 \
+            --user-agent "GoldenPocketMarketExplorer/1.0 contact rizkali@gmail.com" \
+            --requests-per-second 4 \
+            --universe-workers 4 \
             --research-workers 4 \
             --research-batch-size 20 \
             --research-pause-seconds 0.25
 
       - name: Commit refreshed generated data
-        if: github.event_name != 'push'
+        if: github.event_name != 'push' && steps.refresh.outcome == 'success'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

@@ -88,6 +88,7 @@ The workflow:
 - deploys the static webapp after pushes to `main`
 - can be run manually from the GitHub `Actions` tab
 - refreshes generated market data automatically Tuesday-Saturday at `02:30 UTC`, which is `06:30 Asia/Dubai`
+- deploys the last committed webapp data even if a third-party data source temporarily blocks a cloud refresh
 
 To enable the site in GitHub:
 
