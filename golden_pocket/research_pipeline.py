@@ -22,6 +22,24 @@ from golden_pocket.market_pipeline import DEFAULT_USER_AGENT
 YAHOO_SPARK_URL = "https://query1.finance.yahoo.com/v7/finance/spark"
 FMP_STABLE_BASE_URL = "https://financialmodelingprep.com/stable"
 VALID_INSTRUMENT_TYPES = {"EQUITY", "ETF"}
+FUNDAMENTAL_VALUE_FIELDS = {
+    "marketCap",
+    "trailingPe",
+    "priceToSales",
+    "evToEbitda",
+    "revenue",
+    "netIncome",
+    "netMarginPct",
+    "reportedEps",
+    "epsActual",
+    "epsEstimate",
+    "epsSurprisePct",
+    "debtToEquity",
+    "returnOnEquityPct",
+    "analystTarget",
+    "analystTargetHigh",
+    "analystTargetLow",
+}
 
 
 @dataclass(frozen=True)
@@ -412,6 +430,9 @@ def rounded(value: float | None, digits: int = 2) -> float | None:
 
 
 def compact_fundamentals(payload: dict[str, Any]) -> dict[str, Any] | None:
+    has_metric = any(payload.get(field) not in (None, "", []) for field in FUNDAMENTAL_VALUE_FIELDS)
+    if not has_metric:
+        return None
     cleaned = {key: value for key, value in payload.items() if value not in (None, "", [])}
     return cleaned or None
 

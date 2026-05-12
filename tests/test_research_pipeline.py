@@ -6,6 +6,7 @@ from golden_pocket.research_pipeline import (
     build_scores,
     build_targets,
     build_symbol_map,
+    compact_fundamentals,
     first_number,
     parse_fmp_response,
 )
@@ -72,6 +73,19 @@ class ResearchPipelineTests(unittest.TestCase):
         rows = [{"symbol": "BRK.B", "marketCapTTM": "900000000000"}]
         mapped = build_symbol_map(rows)
         self.assertEqual(first_number(mapped["BRK.B"], ["marketCapTTM"]), 900000000000.0)
+
+    def test_compact_fundamentals_ignores_source_only_payloads(self) -> None:
+        self.assertIsNone(
+            compact_fundamentals(
+                {"source": "Financial Modeling Prep", "updatedAt": "2026-05-12T00:00:00Z"}
+            )
+        )
+        self.assertEqual(
+            compact_fundamentals(
+                {"source": "Financial Modeling Prep", "updatedAt": "2026-05-12T00:00:00Z", "marketCap": 10}
+            )["marketCap"],
+            10,
+        )
 
 
 if __name__ == "__main__":
