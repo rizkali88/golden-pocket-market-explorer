@@ -152,6 +152,71 @@
             </div>
           </section>
 
+          <section class="panel reveal agent-dashboard-panel" id="agent-dashboard-panel" data-layout-id="5.5" data-layout-label="John and Max Dashboards">
+            <div class="section-heading">
+              <p class="eyebrow">Decision Dashboards</p>
+              <h2>The dashboards John and Max use before a Trading Decision</h2>
+            </div>
+
+            <div class="agent-dashboard-grid">
+              <article class="agent-dashboard-card agent-dashboard-card--john">
+                <div class="agent-dashboard-card__header">
+                  <div>
+                    <p class="eyebrow">John Dashboard</p>
+                    <h3>Fundamental Investment Memo</h3>
+                  </div>
+                  <span class="decision-badge" id="john-verdict">Awaiting ticker</span>
+                </div>
+                <div class="agent-score-bars" id="john-score-bars"></div>
+                <div class="agent-table-wrap">
+                  <table class="agent-metric-table">
+                    <thead>
+                      <tr>
+                        <th>Institutional KPI</th>
+                        <th>Reading</th>
+                        <th>Interpretation</th>
+                      </tr>
+                    </thead>
+                    <tbody id="john-metrics-table"></tbody>
+                  </table>
+                </div>
+              </article>
+
+              <article class="agent-dashboard-card agent-dashboard-card--max">
+                <div class="agent-dashboard-card__header">
+                  <div>
+                    <p class="eyebrow">Max Dashboard</p>
+                    <h3>Technical Execution Board</h3>
+                  </div>
+                  <span class="decision-badge" id="max-verdict">Awaiting ticker</span>
+                </div>
+                <div class="agent-score-bars" id="max-score-bars"></div>
+                <div class="price-ladder" id="max-price-ladder"></div>
+                <div class="agent-table-wrap">
+                  <table class="agent-metric-table">
+                    <thead>
+                      <tr>
+                        <th>Execution Level</th>
+                        <th>Price</th>
+                        <th>Purpose</th>
+                      </tr>
+                    </thead>
+                    <tbody id="max-levels-table"></tbody>
+                  </table>
+                </div>
+              </article>
+            </div>
+
+            <article class="trading-decision-card" id="trading-decision-card">
+              <div>
+                <p class="eyebrow">Combined Output</p>
+                <h3>Trading Decision</h3>
+                <p id="trading-decision-summary">Select a ticker to combine John and Max into one actionable view.</p>
+              </div>
+              <div class="trading-decision-grid" id="trading-decision-grid"></div>
+            </article>
+          </section>
+
           <section class="panel reveal lens-bar" data-layout-id="6" data-layout-label="Target Model Buttons">
             <div class="lens-bar__inner">
               <p class="eyebrow">Price Target Model</p>

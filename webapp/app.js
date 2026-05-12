@@ -2239,6 +2239,7 @@ function renderEmptyState() {
   document.querySelector("#method-fit-body").textContent =
     "Method recommendations depend on an active ticker selection.";
   document.querySelector("#method-fit-meta").replaceChildren();
+  renderAgentDashboards(null);
 }
 
 function getPrimaryValuationCopy(company) {
@@ -2339,6 +2340,388 @@ function buildFundamentalItems(company, resolved, opportunity) {
           : targetRange,
     },
   ];
+}
+
+function hasValue(value) {
+  return value != null && value !== "" && !Number.isNaN(Number(value));
+}
+
+function formatPriceRange(low, high) {
+  if (!hasValue(low) || !hasValue(high)) {
+    return "Pending";
+  }
+  return `${formatMoney(low)} - ${formatMoney(high)}`;
+}
+
+function getFundamentalCompleteness(fundamentals) {
+  const fields = [
+    "marketCap",
+    "trailingPe",
+    "priceToSales",
+    "evToEbitda",
+    "revenue",
+    "netIncome",
+    "reportedEps",
+    "epsActual",
+    "epsEstimate",
+    "analystTarget",
+    "debtToEquity",
+    "returnOnEquityPct",
+  ];
+  const available = fields.filter((field) => hasValue(fundamentals[field])).length;
+  return Math.round((available / fields.length) * 100);
+}
+
+function makeAgentBar({ label, value, note }) {
+  const row = document.createElement("div");
+  row.className = "agent-bar";
+  row.innerHTML = `
+    <div class="agent-bar__header">
+      <span>${label}</span>
+      <small>${Math.round(value)}/100${note ? ` - ${note}` : ""}</small>
+    </div>
+    <div class="agent-bar__track">
+      <div class="agent-bar__fill" style="width:${clampNumber(value, 0, 100)}%"></div>
+    </div>
+  `;
+  return row;
+}
+
+function makeAgentTableRows(rows) {
+  return rows.map((row) => {
+    const item = document.createElement("tr");
+    item.innerHTML = `
+      <td>${row.label}</td>
+      <td>${row.value}</td>
+      <td><small>${row.note}</small></td>
+    `;
+    return item;
+  });
+}
+
+function setDecisionBadge(selector, verdict) {
+  const badge = document.querySelector(selector);
+  if (!badge) {
+    return;
+  }
+  badge.textContent = verdict;
+  badge.className = "decision-badge";
+  badge.classList.add(`decision-badge--${String(verdict).toLowerCase()}`);
+}
+
+function buildJohnView(company, opportunity, resolved) {
+  const fundamentals = company.fundamentals ?? {};
+  const dataCompleteness = getFundamentalCompleteness(fundamentals);
+  const analystUpside =
+    hasValue(fundamentals.analystTarget) && hasValue(company.price)
+      ? ((Number(fundamentals.analystTarget) / Number(company.price)) - 1) * 100
+      : null;
+  const valuationScore =
+    analystUpside == null
+      ? clampNumber(48 + (resolved.activeTargets?.base ?? 0) * 1.4, 0, 100)
+      : clampNumber(50 + analystUpside * 2.1, 0, 100);
+  const qualityScore = hasValue(fundamentals.netMarginPct)
+    ? clampNumber(48 + Number(fundamentals.netMarginPct) * 1.6, 0, 100)
+    : clampNumber(opportunity.confidenceScore * 0.82, 0, 100);
+  const revisionScore = hasValue(fundamentals.epsSurprisePct)
+    ? clampNumber(50 + Number(fundamentals.epsSurprisePct) * 3.5, 0, 100)
+    : hasValue(fundamentals.epsEstimate)
+      ? 58
+      : 42;
+  const balanceScore = hasValue(fundamentals.debtToEquity)
+    ? clampNumber(88 - Number(fundamentals.debtToEquity) * 12, 15, 95)
+    : opportunity.riskScore;
+  const catalystScore = clampNumber(
+    42 +
+      (hasValue(fundamentals.analystTargetCount) ? 12 : 0) +
+      (fundamentals.earningsDate ? 8 : 0) +
+      Math.max(0, resolved.activeTargets?.base ?? 0) * 1.2,
+    0,
+    100,
+  );
+  const downsideScore = clampNumber(opportunity.riskScore * 0.65 + valuationScore * 0.35, 0, 100);
+  let totalScore = clampNumber(
+    valuationScore * 0.22 +
+      qualityScore * 0.2 +
+      revisionScore * 0.14 +
+      balanceScore * 0.14 +
+      catalystScore * 0.12 +
+      downsideScore * 0.1 +
+      dataCompleteness * 0.08,
+    0,
+    100,
+  );
+
+  if (dataCompleteness < 35) {
+    totalScore = Math.min(totalScore, 58);
+  }
+  if (dataCompleteness < 12) {
+    totalScore = Math.min(totalScore, 45);
+  }
+
+  const verdict = totalScore >= 70 ? "Buy" : totalScore >= 52 ? "Watch" : "Avoid";
+  return {
+    verdict,
+    score: Math.round(totalScore),
+    bars: [
+      { label: "Valuation", value: valuationScore, note: analystUpside == null ? "model proxy" : `${formatPercent(analystUpside)} target gap` },
+      { label: "Business quality", value: qualityScore, note: hasValue(fundamentals.netMarginPct) ? "margin-led" : "needs ROIC" },
+      { label: "Revisions", value: revisionScore, note: hasValue(fundamentals.epsSurprisePct) ? "EPS surprise" : "pending revisions" },
+      { label: "Balance sheet", value: balanceScore, note: hasValue(fundamentals.debtToEquity) ? "debt/equity" : "risk proxy" },
+      { label: "Catalyst path", value: catalystScore, note: fundamentals.earningsDate ? formatShortDate(fundamentals.earningsDate) : "needs calendar" },
+      { label: "Data confidence", value: dataCompleteness, note: "fundamental coverage" },
+    ],
+    metrics: [
+      {
+        label: "Market cap",
+        value: hasValue(fundamentals.marketCap) ? formatCompactNumber(fundamentals.marketCap, { currency: true }) : "Pending",
+        note: "Company size and institutional investability.",
+      },
+      {
+        label: "Valuation multiple",
+        value: hasValue(fundamentals.trailingPe)
+          ? `${formatMultiple(fundamentals.trailingPe)} P/E`
+          : hasValue(fundamentals.priceToSales)
+            ? `${formatMultiple(fundamentals.priceToSales)} P/S`
+            : "Pending",
+        note: "Primary relative valuation input. Sector-specific methods still need refinement.",
+      },
+      {
+        label: "Revenue / net income",
+        value: `${hasValue(fundamentals.revenue) ? formatCompactNumber(fundamentals.revenue, { currency: true }) : "Pending"} / ${hasValue(fundamentals.netIncome) ? formatCompactNumber(fundamentals.netIncome, { currency: true }) : "Pending"}`,
+        note: "Scale and profitability base for the thesis.",
+      },
+      {
+        label: "EPS actual vs estimate",
+        value:
+          hasValue(fundamentals.epsActual) || hasValue(fundamentals.reportedEps)
+            ? `${formatMoney(fundamentals.epsActual ?? fundamentals.reportedEps)}${hasValue(fundamentals.epsEstimate) ? ` vs ${formatMoney(fundamentals.epsEstimate)}` : ""}`
+            : "Pending",
+        note: hasValue(fundamentals.epsSurprisePct) ? `Surprise ${formatPercent(fundamentals.epsSurprisePct)}.` : "Needs richer estimate-revision history.",
+      },
+      {
+        label: "Analyst target range",
+        value: hasValue(fundamentals.analystTarget)
+          ? formatMoney(fundamentals.analystTarget)
+          : "Pending",
+        note: hasValue(fundamentals.analystTargetLow) && hasValue(fundamentals.analystTargetHigh)
+          ? `${formatMoney(fundamentals.analystTargetLow)} to ${formatMoney(fundamentals.analystTargetHigh)}.`
+          : "Sell-side context only, not the final valuation answer.",
+      },
+    ],
+  };
+}
+
+function buildTradeLevels(company, resolved) {
+  if (!hasValue(company.price) || !hasValue(company.fiftyTwoWeekHigh) || !hasValue(company.fiftyTwoWeekLow)) {
+    return null;
+  }
+  const price = Number(company.price);
+  const high = Number(company.fiftyTwoWeekHigh);
+  const low = Number(company.fiftyTwoWeekLow);
+  const range = Math.max(high - low, price * 0.08);
+  const entryLow = low + range * 0.382;
+  const entryHigh = low + range * 0.618;
+  const addLow = low + range * 0.236;
+  const addHigh = low + range * 0.382;
+  const stop = Math.max(0, low + range * 0.18);
+  const target1 = high;
+  const target2 = high + range * 0.272;
+  const target3 = high + range * 0.618;
+  const entryMid = (entryLow + entryHigh) / 2;
+  const rewardRisk = (target2 - entryMid) / Math.max(entryMid - stop, price * 0.01);
+  const position =
+    price >= entryLow && price <= entryHigh
+      ? "Inside entry zone"
+      : price > entryHigh
+        ? "Above preferred entry"
+        : "Below preferred entry";
+
+  return {
+    price,
+    low,
+    high,
+    entryLow,
+    entryHigh,
+    addLow,
+    addHigh,
+    stop,
+    target1,
+    target2,
+    target3,
+    rewardRisk,
+    position,
+    scenarioTarget:
+      resolved.isResearchReady && resolved.activeTargets?.[currentScenarioId] != null
+        ? price * (1 + resolved.activeTargets[currentScenarioId] / 100)
+        : null,
+  };
+}
+
+function buildMaxView(company, opportunity, resolved) {
+  const levels = buildTradeLevels(company, resolved);
+  const rangePosition = opportunity.rangePositionPct ?? 50;
+  const entryTimingScore = clampNumber(100 - Math.abs(rangePosition - 55) * 1.7, 0, 100);
+  const rewardRiskScore = levels ? clampNumber(levels.rewardRisk * 28, 0, 100) : 35;
+  const structureScore = clampNumber(
+    opportunity.trendScore * 0.36 + opportunity.reboundScore * 0.28 + opportunity.riskScore * 0.2 + entryTimingScore * 0.16,
+    0,
+    100,
+  );
+  const totalScore = clampNumber(
+    opportunity.trendScore * 0.24 +
+      structureScore * 0.22 +
+      opportunity.riskScore * 0.16 +
+      opportunity.liquidityScore * 0.12 +
+      entryTimingScore * 0.16 +
+      rewardRiskScore * 0.1,
+    0,
+    100,
+  );
+  const isExtended = rangePosition >= 86;
+  const verdict =
+    totalScore >= 70 && !isExtended && levels?.position !== "Above preferred entry"
+      ? "Enter"
+      : totalScore >= 54
+        ? "Wait"
+        : "Avoid";
+
+  return {
+    verdict,
+    score: Math.round(totalScore),
+    levels,
+    bars: [
+      { label: "Trend regime", value: opportunity.trendScore, note: `${formatPercent(company.threeMonthReturn ?? 0)} 3M` },
+      { label: "Structure quality", value: structureScore, note: levels?.position ?? "pending OHLCV" },
+      { label: "Risk balance", value: opportunity.riskScore, note: "volatility proxy" },
+      { label: "Liquidity", value: opportunity.liquidityScore, note: company.liquidityBucket ?? "estimated" },
+      { label: "Entry timing", value: entryTimingScore, note: `${Math.round(rangePosition)}% of 52W range` },
+      { label: "Reward / risk", value: rewardRiskScore, note: levels ? `${levels.rewardRisk.toFixed(1)}x` : "pending levels" },
+    ],
+  };
+}
+
+function combineTradingDecision(johnView, maxView) {
+  let finalCall = "Wait";
+  if (johnView.verdict === "Avoid" || maxView.verdict === "Avoid") {
+    finalCall = "Avoid";
+  } else if (johnView.verdict === "Buy" && maxView.verdict === "Enter") {
+    finalCall = "Buy";
+  } else if (johnView.verdict === "Watch" && maxView.verdict === "Enter") {
+    finalCall = "Watch";
+  }
+  const conviction = Math.round((johnView.score * 0.55 + maxView.score * 0.45));
+  return { finalCall, conviction };
+}
+
+function renderPriceLadder(levels) {
+  const ladder = document.querySelector("#max-price-ladder");
+  if (!ladder) {
+    return;
+  }
+  if (!levels) {
+    ladder.textContent = "Attach OHLCV and swing-level data to render Max's execution ladder.";
+    return;
+  }
+  const min = Math.min(levels.stop, levels.addLow, levels.entryLow, levels.price);
+  const max = Math.max(levels.target3, levels.target2, levels.target1, levels.price);
+  const toPosition = (value) => clampNumber(((value - min) / Math.max(max - min, 1)) * 100, 0, 100);
+  const rows = [
+    ["Stop", levels.stop],
+    ["Add", (levels.addLow + levels.addHigh) / 2],
+    ["Entry", (levels.entryLow + levels.entryHigh) / 2],
+    ["Current", levels.price],
+    ["Target 1", levels.target1],
+    ["Target 2", levels.target2],
+    ["Target 3", levels.target3],
+  ];
+  ladder.replaceChildren(
+    ...rows.map(([label, value]) => {
+      const row = document.createElement("div");
+      row.className = "price-ladder__row";
+      row.innerHTML = `
+        <span>${label}</span>
+        <div class="price-ladder__track">
+          <i class="price-ladder__dot" style="left:${toPosition(value)}%"></i>
+        </div>
+        <strong>${formatMoney(value)}</strong>
+      `;
+      return row;
+    }),
+  );
+}
+
+function renderAgentDashboards(company, opportunity, resolved) {
+  const root = document.querySelector("#agent-dashboard-panel");
+  if (!root) {
+    return;
+  }
+  if (!company || !opportunity || !resolved) {
+    setDecisionBadge("#john-verdict", "Awaiting");
+    setDecisionBadge("#max-verdict", "Awaiting");
+    document.querySelector("#john-score-bars")?.replaceChildren();
+    document.querySelector("#max-score-bars")?.replaceChildren();
+    document.querySelector("#john-metrics-table")?.replaceChildren();
+    document.querySelector("#max-levels-table")?.replaceChildren();
+    document.querySelector("#max-price-ladder")?.replaceChildren();
+    document.querySelector("#trading-decision-summary").textContent =
+      "Select a ticker to combine John and Max into one actionable view.";
+    document.querySelector("#trading-decision-grid")?.replaceChildren();
+    return;
+  }
+
+  const johnView = buildJohnView(company, opportunity, resolved);
+  const maxView = buildMaxView(company, opportunity, resolved);
+  const decision = combineTradingDecision(johnView, maxView);
+  const levels = maxView.levels;
+
+  setDecisionBadge("#john-verdict", johnView.verdict);
+  setDecisionBadge("#max-verdict", maxView.verdict);
+  document.querySelector("#john-score-bars")?.replaceChildren(...johnView.bars.map(makeAgentBar));
+  document.querySelector("#max-score-bars")?.replaceChildren(...maxView.bars.map(makeAgentBar));
+  document.querySelector("#john-metrics-table")?.replaceChildren(...makeAgentTableRows(johnView.metrics));
+  renderPriceLadder(levels);
+
+  const maxRows = levels
+    ? [
+        { label: "Preferred entry", value: formatPriceRange(levels.entryLow, levels.entryHigh), note: "Fibonacci 38.2%-61.8% proxy from the current 52-week range until swing OHLCV is attached." },
+        { label: "Add zone", value: formatPriceRange(levels.addLow, levels.addHigh), note: "Deeper retracement zone; only valid if John thesis remains intact." },
+        { label: "Stop / invalidation", value: formatMoney(levels.stop), note: "Structural risk line. Later this should use ATR and detected swing invalidation." },
+        { label: "Target 1", value: formatMoney(levels.target1), note: "Prior 52-week high / first trim zone." },
+        { label: "Target 2", value: formatMoney(levels.target2), note: "127.2% extension proxy." },
+        { label: "Target 3", value: formatMoney(levels.target3), note: "161.8% extension proxy; use only if trend confirms." },
+      ]
+    : [
+        { label: "Execution levels", value: "Pending", note: "Requires price, 52-week range, and eventually full OHLCV swing data." },
+      ];
+  document.querySelector("#max-levels-table")?.replaceChildren(...makeAgentTableRows(maxRows));
+
+  const decisionGrid = document.querySelector("#trading-decision-grid");
+  const decisionSummary = document.querySelector("#trading-decision-summary");
+  if (decisionSummary) {
+    decisionSummary.textContent =
+      `${company.ticker}: John says ${johnView.verdict}, Max says ${maxView.verdict}. Final Trading Decision is ${decision.finalCall} with ${decision.conviction}/100 conviction.`;
+  }
+  if (decisionGrid) {
+    const tiles = [
+      ["Final call", decision.finalCall],
+      ["Conviction", `${decision.conviction}/100`],
+      ["Entry zone", levels ? formatPriceRange(levels.entryLow, levels.entryHigh) : "Pending"],
+      ["Stop", levels ? formatMoney(levels.stop) : "Pending"],
+      ["Target 1", levels ? formatMoney(levels.target1) : "Pending"],
+      ["Target 2", levels ? formatMoney(levels.target2) : "Pending"],
+      ["Target 3", levels ? formatMoney(levels.target3) : "Pending"],
+      ["Reward/risk", levels ? `${levels.rewardRisk.toFixed(1)}x` : "Pending"],
+    ];
+    decisionGrid.replaceChildren(
+      ...tiles.map(([label, value]) => {
+        const tile = document.createElement("div");
+        tile.className = "decision-tile";
+        tile.innerHTML = `<span>${label}</span><strong>${value}</strong>`;
+        return tile;
+      }),
+    );
+  }
 }
 
 function renderCompany(id) {
@@ -2489,6 +2872,7 @@ function renderCompany(id) {
   buildTargetCards(company, resolved);
   buildMethodCompare(company, resolved);
   renderMethodFit(company, resolved);
+  renderAgentDashboards(company, opportunity, resolved);
 
   document.querySelectorAll(".opportunity-table tbody tr").forEach((row) => {
     row.classList.toggle("is-active", row.dataset.id === id);

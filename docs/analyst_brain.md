@@ -281,6 +281,34 @@ Max output:
 - Chart thesis.
 - What would invalidate the setup.
 
+## Dashboard Visual Model
+
+The workbench should show John and Max as two separate decision dashboards, then combine them into one `Trading Decision`.
+
+John dashboard:
+
+- Horizontal score bars for valuation, business quality, revisions, balance sheet, catalyst path, and data confidence.
+- Institutional KPI table with market cap, valuation multiple, revenue/net income, EPS actual vs estimate, and analyst target range.
+- Verdict badge: `Buy`, `Watch`, or `Avoid`.
+
+Max dashboard:
+
+- Horizontal score bars for trend regime, structure quality, risk balance, liquidity, entry timing, and reward/risk.
+- Price ladder showing stop, add zone, entry zone, current price, target 1, target 2, and target 3.
+- Execution table explaining why each level matters.
+- Verdict badge: `Enter`, `Wait`, or `Avoid`.
+
+Combined dashboard:
+
+- Final call.
+- Conviction score.
+- Entry zone.
+- Stop.
+- Target 1, target 2, target 3.
+- Reward/risk.
+
+Current limitation: the first workbench version uses available fundamentals, 52-week range, and model proxies. The next upgrade should replace proxy execution levels with daily OHLCV-derived swing highs/lows, ATR, moving averages, Fibonacci levels, fair value gaps, and support/resistance clusters.
+
 ## Prod And Non-Prod Data Architecture
 
 The project needs two spaces once the data schema starts changing:
