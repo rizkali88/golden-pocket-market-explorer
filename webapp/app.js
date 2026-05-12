@@ -2399,6 +2399,257 @@ function makeAgentTableRows(rows) {
   });
 }
 
+function getAnalystUpsidePct(company) {
+  const fundamentals = company.fundamentals ?? {};
+  if (!hasValue(fundamentals.analystTarget) || !hasValue(company.price)) {
+    return null;
+  }
+  return ((Number(fundamentals.analystTarget) / Number(company.price)) - 1) * 100;
+}
+
+function makeAgentInputTile({ label, value, note, score, range }) {
+  const tile = document.createElement("article");
+  tile.className = "agent-input-tile";
+  const metric = document.createElement("span");
+  metric.textContent = label;
+  const reading = document.createElement("strong");
+  reading.textContent = value;
+  tile.append(metric, reading);
+
+  if (range) {
+    const track = document.createElement("div");
+    track.className = "range-map";
+    track.innerHTML = `
+      <div class="range-map__track">
+        <i class="range-map__dot" style="left:${clampNumber(range.positionPct, 0, 100)}%"></i>
+      </div>
+      <div class="range-map__labels">
+        <b>${range.low}</b>
+        <b>${range.high}</b>
+      </div>
+    `;
+    tile.append(track);
+  } else if (score != null) {
+    const track = document.createElement("div");
+    track.className = "agent-mini-track";
+    track.innerHTML = `<i class="agent-mini-fill" style="width:${clampNumber(score, 0, 100)}%"></i>`;
+    tile.append(track);
+  }
+
+  const detail = document.createElement("small");
+  detail.textContent = note;
+  tile.append(detail);
+  return tile;
+}
+
+function makeAgentTargetItem({ label, value, note, score }) {
+  const item = document.createElement("article");
+  item.className = "agent-target-item";
+  item.innerHTML = `
+    <span>${label}</span>
+    <strong>${value}</strong>
+    <div class="agent-mini-track">
+      <i class="agent-mini-fill" style="width:${clampNumber(score, 0, 100)}%"></i>
+    </div>
+    <small>${note}</small>
+  `;
+  return item;
+}
+
+function makeReturnBar({ label, value }) {
+  const row = document.createElement("div");
+  row.className = "return-bar";
+  const numericValue = hasValue(value) ? Number(value) : null;
+  const width = numericValue == null ? 0 : clampNumber(Math.abs(numericValue) / 100 * 50, 0, 50);
+  const left = numericValue == null ? 50 : numericValue >= 0 ? 50 : 50 - width;
+  row.innerHTML = `
+    <span>${label}</span>
+    <div class="return-bar__track">
+      <i class="return-bar__axis"></i>
+      <i class="return-bar__fill${numericValue != null && numericValue < 0 ? " is-negative" : ""}" style="left:${left}%; width:${width}%"></i>
+    </div>
+    <strong>${numericValue == null ? "Pending" : formatPercent(numericValue)}</strong>
+  `;
+  return row;
+}
+
+function buildJohnInputTiles(company, opportunity, resolved) {
+  const fundamentals = company.fundamentals ?? {};
+  const analystUpside = getAnalystUpsidePct(company);
+  const dataCompleteness = getFundamentalCompleteness(fundamentals);
+  const scenarioMove = resolved.activeTargets?.[currentScenarioId] ?? null;
+  const scenarioTarget =
+    hasValue(company.price) && scenarioMove != null
+      ? Number(company.price) * (1 + Number(scenarioMove) / 100)
+      : null;
+
+  return [
+    {
+      label: "Market cap",
+      value: hasValue(fundamentals.marketCap)
+        ? formatCompactNumber(fundamentals.marketCap, { currency: true })
+        : "Pending",
+      note: `Liquidity bucket: ${company.liquidityBucket ?? "pending"}. Avg dollar volume ${hasValue(company.avgDailyDollarVolume) ? formatCompactNumber(company.avgDailyDollarVolume, { currency: true }) : "pending"}.`,
+      score: opportunity.liquidityScore,
+    },
+    {
+      label: "Revenue / profit",
+      value: `${hasValue(fundamentals.revenue) ? formatCompactNumber(fundamentals.revenue, { currency: true }) : "Pending"} / ${hasValue(fundamentals.netIncome) ? formatCompactNumber(fundamentals.netIncome, { currency: true }) : "Pending"}`,
+      note: hasValue(fundamentals.netMarginPct)
+        ? `Net margin ${formatPercent(fundamentals.netMarginPct)}.`
+        : "John needs profitability and cash-flow depth next.",
+      score: hasValue(fundamentals.netMarginPct) ? clampNumber(50 + Number(fundamentals.netMarginPct) * 1.5, 0, 100) : null,
+    },
+    {
+      label: "Valuation multiple",
+      value: hasValue(fundamentals.trailingPe)
+        ? `${formatMultiple(fundamentals.trailingPe)} P/E`
+        : hasValue(fundamentals.evToEbitda)
+          ? `${formatMultiple(fundamentals.evToEbitda)} EV/EBITDA`
+          : "Pending",
+      note: hasValue(fundamentals.evToEbitda)
+        ? `EV/EBITDA ${formatMultiple(fundamentals.evToEbitda)}.`
+        : "Needs richer peer-relative valuation.",
+      score: hasValue(fundamentals.trailingPe)
+        ? clampNumber(95 - Number(fundamentals.trailingPe) * 1.6, 0, 100)
+        : hasValue(fundamentals.evToEbitda)
+          ? clampNumber(88 - Number(fundamentals.evToEbitda) * 2.4, 0, 100)
+          : null,
+    },
+    {
+      label: "EPS surprise",
+      value:
+        hasValue(fundamentals.epsActual) || hasValue(fundamentals.reportedEps)
+          ? `${formatMoney(fundamentals.epsActual ?? fundamentals.reportedEps)}${hasValue(fundamentals.epsEstimate) ? ` vs ${formatMoney(fundamentals.epsEstimate)}` : ""}`
+          : "Pending",
+      note: hasValue(fundamentals.epsSurprisePct)
+        ? `Surprise ${formatPercent(fundamentals.epsSurprisePct)}.`
+        : "Needs estimate revision history.",
+      score: hasValue(fundamentals.epsSurprisePct)
+        ? clampNumber(50 + Number(fundamentals.epsSurprisePct) * 3.5, 0, 100)
+        : null,
+    },
+    {
+      label: "Analyst target",
+      value: hasValue(fundamentals.analystTarget) ? formatMoney(fundamentals.analystTarget) : "Pending",
+      note: analystUpside == null
+        ? "Sell-side target not available for this ticker."
+        : `${formatPercent(analystUpside)} vs current price, based on ${formatNumber(fundamentals.analystTargetCount ?? 0, 0)} observation(s).`,
+      score: analystUpside == null ? null : clampNumber(50 + analystUpside * 2, 0, 100),
+    },
+    {
+      label: "Model target",
+      value: scenarioTarget == null ? "Pending" : formatMoney(scenarioTarget),
+      note: `${titleCase(currentScenarioId)} case using ${getMethodById(resolved.effectiveMethodId).label}; ${scenarioMove == null ? "move pending" : formatPercent(scenarioMove)} from current price.`,
+      score: scenarioMove == null ? null : clampNumber(50 + Number(scenarioMove) * 2.8, 0, 100),
+    },
+    {
+      label: "Balance sheet",
+      value: hasValue(fundamentals.debtToEquity)
+        ? `${formatMultiple(fundamentals.debtToEquity)} debt/equity`
+        : "Pending",
+      note: hasValue(fundamentals.debtToEquity)
+        ? "John uses this as a first-pass leverage risk signal."
+        : "Needs debt maturity, interest cover, and liquidity details.",
+      score: hasValue(fundamentals.debtToEquity)
+        ? clampNumber(88 - Number(fundamentals.debtToEquity) * 12, 15, 95)
+        : null,
+    },
+    {
+      label: "Data confidence",
+      value: `${dataCompleteness}/100`,
+      note: fundamentals.source
+        ? `${fundamentals.source} refresh ${fundamentals.updatedAt ? formatShortDate(fundamentals.updatedAt) : "date pending"}.`
+        : "This ticker is still missing live fundamentals.",
+      score: dataCompleteness,
+    },
+  ];
+}
+
+function buildJohnTargetTiles(company, resolved) {
+  if (!resolved.isResearchReady || !hasValue(company.price) || !resolved.activeTargets) {
+    return [
+      { label: "Bear case", value: "Pending", note: "Needs price and target model.", score: 0 },
+      { label: "Base case", value: "Pending", note: "Needs price and target model.", score: 0 },
+      { label: "Bull case", value: "Pending", note: "Needs price and target model.", score: 0 },
+    ];
+  }
+
+  return ["bear", "base", "bull"].map((scenarioId) => {
+    const move = resolved.activeTargets[scenarioId];
+    const target = Number(company.price) * (1 + move / 100);
+    return {
+      label: `${titleCase(scenarioId)} case`,
+      value: formatMoney(target),
+      note: `${formatPercent(move)} from current price.`,
+      score: scenarioId === "bear"
+        ? clampNumber(100 + move * 3.6, 0, 100)
+        : clampNumber(50 + move * 2.6, 0, 100),
+    };
+  });
+}
+
+function buildMaxInputTiles(company, opportunity, levels) {
+  const rangePosition = opportunity.rangePositionPct ?? 50;
+  const preferredEntry =
+    levels == null ? "Pending" : formatPriceRange(levels.entryLow, levels.entryHigh);
+  return [
+    {
+      label: "52W range map",
+      value: hasValue(company.price) ? formatMoney(company.price) : "Pending",
+      note: `${Math.round(rangePosition)}% through the 52-week range.`,
+      range: {
+        low: hasValue(company.fiftyTwoWeekLow) ? formatMoney(company.fiftyTwoWeekLow) : "Low pending",
+        high: hasValue(company.fiftyTwoWeekHigh) ? formatMoney(company.fiftyTwoWeekHigh) : "High pending",
+        positionPct: rangePosition,
+      },
+    },
+    {
+      label: "Preferred entry",
+      value: preferredEntry,
+      note: levels?.position ?? "Needs 52-week range and OHLCV swing data.",
+      score: levels ? clampNumber(100 - Math.abs(rangePosition - 55) * 1.7, 0, 100) : null,
+    },
+    {
+      label: "Trend regime",
+      value: `${opportunity.trendScore}/100`,
+      note: `${hasValue(company.threeMonthReturn) ? formatPercent(company.threeMonthReturn) : "Pending"} 3M return.`,
+      score: opportunity.trendScore,
+    },
+    {
+      label: "Rebound setup",
+      value: `${opportunity.reboundScore}/100`,
+      note: hasValue(company.offHighPct)
+        ? `${formatPercent(company.offHighPct * -1)} from 52W high; ${formatPercent(company.aboveLowPct ?? 0)} above low.`
+        : "Needs high/low context.",
+      score: opportunity.reboundScore,
+    },
+    {
+      label: "Risk balance",
+      value: `${opportunity.riskScore}/100`,
+      note: "Proxy for drawdown/volatility risk until ATR is attached.",
+      score: opportunity.riskScore,
+    },
+    {
+      label: "Liquidity",
+      value: company.liquidityBucket ?? "Pending",
+      note: hasValue(company.avgDailyDollarVolume)
+        ? `${formatCompactNumber(company.avgDailyDollarVolume, { currency: true })} avg daily dollar volume.`
+        : "Needs average dollar volume.",
+      score: opportunity.liquidityScore,
+    },
+  ];
+}
+
+function buildReturnBars(company) {
+  return [
+    { label: "1M", value: company.oneMonthReturn },
+    { label: "3M", value: company.threeMonthReturn },
+    { label: "6M", value: company.sixMonthReturn },
+    { label: "1Y", value: company.oneYearReturn },
+  ];
+}
+
 function setDecisionBadge(selector, verdict) {
   const badge = document.querySelector(selector);
   if (!badge) {
@@ -2412,10 +2663,7 @@ function setDecisionBadge(selector, verdict) {
 function buildJohnView(company, opportunity, resolved) {
   const fundamentals = company.fundamentals ?? {};
   const dataCompleteness = getFundamentalCompleteness(fundamentals);
-  const analystUpside =
-    hasValue(fundamentals.analystTarget) && hasValue(company.price)
-      ? ((Number(fundamentals.analystTarget) / Number(company.price)) - 1) * 100
-      : null;
+  const analystUpside = getAnalystUpsidePct(company);
   const valuationScore =
     analystUpside == null
       ? clampNumber(48 + (resolved.activeTargets?.base ?? 0) * 1.4, 0, 100)
@@ -2463,6 +2711,8 @@ function buildJohnView(company, opportunity, resolved) {
   return {
     verdict,
     score: Math.round(totalScore),
+    inputTiles: buildJohnInputTiles(company, opportunity, resolved),
+    targetTiles: buildJohnTargetTiles(company, resolved),
     bars: [
       { label: "Valuation", value: valuationScore, note: analystUpside == null ? "model proxy" : `${formatPercent(analystUpside)} target gap` },
       { label: "Business quality", value: qualityScore, note: hasValue(fundamentals.netMarginPct) ? "margin-led" : "needs ROIC" },
@@ -2590,6 +2840,8 @@ function buildMaxView(company, opportunity, resolved) {
     verdict,
     score: Math.round(totalScore),
     levels,
+    inputTiles: buildMaxInputTiles(company, opportunity, levels),
+    returnBars: buildReturnBars(company),
     bars: [
       { label: "Trend regime", value: opportunity.trendScore, note: `${formatPercent(company.threeMonthReturn ?? 0)} 3M` },
       { label: "Structure quality", value: structureScore, note: levels?.position ?? "pending OHLCV" },
@@ -2659,6 +2911,14 @@ function renderAgentDashboards(company, opportunity, resolved) {
   if (!company || !opportunity || !resolved) {
     setDecisionBadge("#john-verdict", "Awaiting");
     setDecisionBadge("#max-verdict", "Awaiting");
+    document.querySelector("#john-data-source").textContent =
+      "Ticker-level fundamentals and valuation context";
+    document.querySelector("#max-data-source").textContent =
+      "Price structure, trend, liquidity, and execution levels";
+    document.querySelector("#john-input-grid")?.replaceChildren();
+    document.querySelector("#john-target-strip")?.replaceChildren();
+    document.querySelector("#max-input-grid")?.replaceChildren();
+    document.querySelector("#max-return-bars")?.replaceChildren();
     document.querySelector("#john-score-bars")?.replaceChildren();
     document.querySelector("#max-score-bars")?.replaceChildren();
     document.querySelector("#john-metrics-table")?.replaceChildren();
@@ -2677,6 +2937,14 @@ function renderAgentDashboards(company, opportunity, resolved) {
 
   setDecisionBadge("#john-verdict", johnView.verdict);
   setDecisionBadge("#max-verdict", maxView.verdict);
+  document.querySelector("#john-data-source").textContent =
+    `${company.ticker} fundamentals, targets, and model evidence`;
+  document.querySelector("#max-data-source").textContent =
+    `${company.ticker} price structure, momentum, and risk map`;
+  document.querySelector("#john-input-grid")?.replaceChildren(...johnView.inputTiles.map(makeAgentInputTile));
+  document.querySelector("#john-target-strip")?.replaceChildren(...johnView.targetTiles.map(makeAgentTargetItem));
+  document.querySelector("#max-input-grid")?.replaceChildren(...maxView.inputTiles.map(makeAgentInputTile));
+  document.querySelector("#max-return-bars")?.replaceChildren(...maxView.returnBars.map(makeReturnBar));
   document.querySelector("#john-score-bars")?.replaceChildren(...johnView.bars.map(makeAgentBar));
   document.querySelector("#max-score-bars")?.replaceChildren(...maxView.bars.map(makeAgentBar));
   document.querySelector("#john-metrics-table")?.replaceChildren(...makeAgentTableRows(johnView.metrics));

@@ -273,6 +273,153 @@ body::before {
   gap: 16px;
 }
 
+.agent-input-pack {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.agent-pack-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: end;
+}
+
+.agent-pack-title span {
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.agent-pack-title small {
+  color: var(--muted);
+  font-weight: 700;
+  text-align: right;
+}
+
+.agent-input-grid,
+.agent-target-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.agent-input-tile,
+.agent-target-item {
+  display: grid;
+  gap: 7px;
+  min-height: 96px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.agent-input-tile span,
+.agent-target-item span {
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.agent-input-tile strong,
+.agent-target-item strong {
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.15;
+}
+
+.agent-input-tile small,
+.agent-target-item small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.agent-mini-track,
+.range-map__track,
+.return-bar__track {
+  position: relative;
+  overflow: hidden;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(127, 139, 150, 0.22);
+}
+
+.agent-mini-fill,
+.range-map__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
+.range-map {
+  display: grid;
+  gap: 8px;
+}
+
+.range-map__dot {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--panel-strong);
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+}
+
+.range-map__labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.return-bars {
+  display: grid;
+  gap: 9px;
+}
+
+.return-bar {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 64px;
+  gap: 10px;
+  align-items: center;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.return-bar__axis {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.32);
+}
+
+.return-bar__fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
+.return-bar__fill.is-negative {
+  background: linear-gradient(90deg, rgba(168, 91, 50, 0.85), rgba(201, 111, 59, 0.85));
+}
+
 .agent-dashboard-card__header h3,
 .trading-decision-card h3 {
   margin: 0;
@@ -1397,6 +1544,8 @@ p {
   .support-grid,
   .agent-stack-grid,
   .agent-dashboard-grid,
+  .agent-input-grid,
+  .agent-target-strip,
   .trading-decision-card,
   .vehicle-layout,
   .scenario-layout,
@@ -1453,6 +1602,19 @@ p {
 
   .price-ladder__row {
     gap: 6px;
+  }
+
+  .agent-pack-title {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .agent-pack-title small {
+    text-align: left;
+  }
+
+  .return-bar {
+    grid-template-columns: 38px minmax(0, 1fr) 58px;
   }
 
   .page-shell,
