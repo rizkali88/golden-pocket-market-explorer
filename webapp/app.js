@@ -1020,6 +1020,12 @@ const tradingViewChartHost = document.querySelector("#tradingview-chart-host");
 const tradingViewChartTitle = document.querySelector("#tradingview-chart-title");
 const tradingViewChartSubtitle = document.querySelector("#tradingview-chart-subtitle");
 const tradingViewSymbolLink = document.querySelector("#tradingview-symbol-link");
+const maxExecutionChartHost = document.querySelector("#max-execution-chart-host");
+const maxExecutionTitle = document.querySelector("#max-execution-title");
+const maxExecutionSummary = document.querySelector("#max-execution-summary");
+const maxExecutionScore = document.querySelector("#max-execution-score");
+const maxExecutionPosition = document.querySelector("#max-execution-position");
+const maxExecutionLevels = document.querySelector("#max-execution-levels");
 const layoutSections = [...document.querySelectorAll("[data-layout-id]")].sort(
   (left, right) => Number(left.dataset.layoutId) - Number(right.dataset.layoutId),
 );
@@ -1051,6 +1057,8 @@ const currentFilters = {
 };
 let layoutModeResetTimer = null;
 let currentTradingViewKey = "";
+let currentMaxExecutionChart = null;
+let currentMaxExecutionResizeObserver = null;
 
 function makeButton(item, className, onClick) {
   const button = document.createElement("button");
@@ -1276,6 +1284,290 @@ function renderTradingViewChart(company, options = {}) {
 
   container.append(widget, copyright, script);
   tradingViewChartHost.replaceChildren(container);
+}
+
+function makeMaxExecutionPlaceholder(message) {
+  const placeholder = document.createElement("div");
+  placeholder.className = "max-execution-placeholder";
+  placeholder.innerHTML = `
+    <div>
+      <strong>Execution map unavailable</strong>
+      <span>${message}</span>
+    </div>
+  `;
+  return placeholder;
+}
+
+function getMaxExecutionChartPalette() {
+  const isDark = document.documentElement.dataset.theme === "dark";
+  return {
+    background: isDark ? "#0f1a27" : "#f7f1e8",
+    grid: isDark ? "rgba(173, 191, 211, 0.13)" : "rgba(26, 43, 58, 0.12)",
+    text: isDark ? "#b9c6d8" : "#3b4655",
+    up: "#63d2c8",
+    down: "#e86f61",
+    wickUp: "#63d2c8",
+    wickDown: "#e86f61",
+    entry: "#63d2c8",
+    add: "#8fbfb7",
+    stop: "#e86f61",
+    target: "#ffb16c",
+    current: "#f2f4fb",
+  };
+}
+
+function buildExecutionCandles(company, levels) {
+  const count = 78;
+  const range = Math.max(levels.high - levels.low, levels.price * 0.08);
+  const historicalReturn = Number(
+    company.oneYearReturn ?? company.sixMonthReturn ?? company.threeMonthReturn ?? 0,
+  );
+  const returnBase = Math.max(0.22, 1 + historicalReturn / 100);
+  const startGuess = levels.price / returnBase;
+  const start = clampNumber(
+    startGuess,
+    Math.max(levels.low * 0.84, 0.01),
+    Math.max(levels.high, levels.price) * 1.04,
+  );
+  const maxClamp = Math.max(levels.target2, levels.high, levels.price) * 1.04;
+  const minClamp = Math.max(Math.min(levels.stop, levels.low) * 0.92, 0.01);
+  const endDate = company.date ? new Date(company.date) : new Date();
+  const candles = [];
+  let previousClose = start;
+
+  for (let index = 0; index < count; index += 1) {
+    const progress = index / (count - 1);
+    const date = new Date(endDate);
+    date.setDate(endDate.getDate() - (count - 1 - index));
+    const trendValue = start + (levels.price - start) * progress;
+    const wave = Math.sin(progress * Math.PI * 5.2) * range * 0.035;
+    const pullback =
+      progress > 0.62 && progress < 0.78
+        ? -Math.sin((progress - 0.62) / 0.16 * Math.PI) * range * 0.05
+        : 0;
+    const close =
+      index === count - 1
+        ? levels.price
+        : clampNumber(trendValue + wave + pullback, minClamp, maxClamp);
+    const open = index === 0 ? close - range * 0.01 : previousClose;
+    const wickSize = range * (0.009 + (index % 6) * 0.0016);
+    const high = clampNumber(Math.max(open, close) + wickSize, minClamp, maxClamp);
+    const low = clampNumber(Math.min(open, close) - wickSize * 1.08, minClamp, maxClamp);
+    candles.push({
+      time: Math.floor(date.getTime() / 1000),
+      open,
+      high,
+      low,
+      close,
+    });
+    previousClose = close;
+  }
+
+  return candles;
+}
+
+function renderMaxExecutionLevelCards(levels) {
+  if (!maxExecutionLevels) {
+    return;
+  }
+
+  if (!levels) {
+    maxExecutionLevels.replaceChildren(
+      ...[
+        ["Entry Zone", "Pending", "Needs price and 52-week structure.", "entry"],
+        ["Stop Loss", "Pending", "Risk line unlocks after data enrichment.", "risk"],
+        ["Targets", "Pending", "TP ladder waits for Max levels.", "target"],
+      ].map(([label, value, note, tone]) => makeMaxExecutionLevelCard(label, value, note, tone)),
+    );
+    return;
+  }
+
+  const upsideToTarget2 = ((levels.target2 - levels.price) / Math.max(levels.price, 0.01)) * 100;
+  const downsideToStop = ((levels.stop - levels.price) / Math.max(levels.price, 0.01)) * 100;
+  const cards = [
+    [
+      "Entry Zone",
+      formatPriceRange(levels.entryLow, levels.entryHigh),
+      `${levels.position}; add zone ${formatPriceRange(levels.addLow, levels.addHigh)}.`,
+      "entry",
+    ],
+    [
+      "Stop Loss",
+      formatMoney(levels.stop),
+      `${formatPercent(downsideToStop)} from current price. Thesis invalidation line.`,
+      "risk",
+    ],
+    [
+      "Take Profit",
+      `${formatMoney(levels.target1)} / ${formatMoney(levels.target2)} / ${formatMoney(levels.target3)}`,
+      `TP2 implies ${formatPercent(upsideToTarget2)} with ${levels.rewardRisk.toFixed(1)}x reward/risk.`,
+      "target",
+    ],
+  ];
+  maxExecutionLevels.replaceChildren(
+    ...cards.map(([label, value, note, tone]) => makeMaxExecutionLevelCard(label, value, note, tone)),
+  );
+}
+
+function makeMaxExecutionLevelCard(label, value, note, tone) {
+  const card = document.createElement("article");
+  card.dataset.tone = tone;
+  const labelElement = document.createElement("span");
+  labelElement.textContent = label;
+  const valueElement = document.createElement("strong");
+  valueElement.textContent = value;
+  const noteElement = document.createElement("small");
+  noteElement.textContent = note;
+  card.append(labelElement, valueElement, noteElement);
+  return card;
+}
+
+function renderMaxExecutionChart(company, opportunity = null, resolved = null) {
+  if (!maxExecutionChartHost || !company) {
+    return;
+  }
+
+  const profile = opportunity ?? getOpportunityProfile(company);
+  const targetContext = resolved ?? profile.resolved;
+  const maxView = buildMaxView(company, profile, targetContext, { includeDetails: false });
+  const levels = maxView.levels;
+
+  if (maxExecutionTitle) {
+    maxExecutionTitle.textContent = `${company.ticker} Max execution map`;
+  }
+  if (maxExecutionSummary) {
+    maxExecutionSummary.textContent = levels
+      ? `Technical call is ${maxView.verdict} with ${maxView.score}/100 conviction. Max wants entry near ${formatPriceRange(levels.entryLow, levels.entryHigh)}, stop at ${formatMoney(levels.stop)}, and staged profit-taking into ${formatMoney(levels.target1)}, ${formatMoney(levels.target2)}, then ${formatMoney(levels.target3)}.`
+      : `${company.ticker} is not research-ready enough for Max to draw entry, stop, and take-profit levels yet.`;
+  }
+  if (maxExecutionScore) {
+    maxExecutionScore.textContent = `${maxView.score}/100`;
+  }
+  if (maxExecutionPosition) {
+    maxExecutionPosition.textContent = levels?.position ?? "Waiting for price and range data";
+  }
+  setDecisionBadge("#max-execution-verdict", maxView.verdict);
+  renderMaxExecutionLevelCards(levels);
+
+  if (currentMaxExecutionResizeObserver) {
+    currentMaxExecutionResizeObserver.disconnect();
+    currentMaxExecutionResizeObserver = null;
+  }
+  if (currentMaxExecutionChart?.remove) {
+    currentMaxExecutionChart.remove();
+    currentMaxExecutionChart = null;
+  }
+
+  if (!levels) {
+    maxExecutionChartHost.replaceChildren(
+      makeMaxExecutionPlaceholder("Attach price, 52-week high/low, and OHLCV history to unlock Max's chart."),
+    );
+    return;
+  }
+
+  if (!window.LightweightCharts) {
+    maxExecutionChartHost.replaceChildren(
+      makeMaxExecutionPlaceholder("The chart library did not load. Level cards are still available on the right."),
+    );
+    return;
+  }
+
+  maxExecutionChartHost.replaceChildren();
+  const palette = getMaxExecutionChartPalette();
+  const chartHeight = Math.max(maxExecutionChartHost.clientHeight || 360, 300);
+  const chart = window.LightweightCharts.createChart(maxExecutionChartHost, {
+    height: chartHeight,
+    layout: {
+      background: { type: window.LightweightCharts.ColorType.Solid, color: palette.background },
+      textColor: palette.text,
+      fontFamily: "Aptos, Segoe UI, sans-serif",
+    },
+    grid: {
+      vertLines: { color: palette.grid },
+      horzLines: { color: palette.grid },
+    },
+    rightPriceScale: {
+      borderColor: palette.grid,
+      scaleMargins: { top: 0.12, bottom: 0.16 },
+    },
+    timeScale: {
+      borderColor: palette.grid,
+      rightOffset: 8,
+      barSpacing: 7,
+    },
+    crosshair: {
+      mode: window.LightweightCharts.CrosshairMode.Normal,
+    },
+  });
+  const candleSeries = chart.addCandlestickSeries({
+    upColor: palette.up,
+    downColor: palette.down,
+    borderUpColor: palette.up,
+    borderDownColor: palette.down,
+    wickUpColor: palette.wickUp,
+    wickDownColor: palette.wickDown,
+  });
+  const candles = buildExecutionCandles(company, levels);
+  candleSeries.setData(candles);
+
+  const dashed = window.LightweightCharts.LineStyle.Dashed;
+  const dotted = window.LightweightCharts.LineStyle.Dotted;
+  [
+    ["SL", levels.stop, palette.stop, dashed],
+    ["Add Low", levels.addLow, palette.add, dotted],
+    ["Entry Low", levels.entryLow, palette.entry, dashed],
+    ["Entry High", levels.entryHigh, palette.entry, dashed],
+    ["Current", levels.price, palette.current, window.LightweightCharts.LineStyle.Solid],
+    ["TP1", levels.target1, palette.target, dashed],
+    ["TP2", levels.target2, palette.target, dashed],
+    ["TP3", levels.target3, palette.target, dotted],
+  ].forEach(([title, price, color, lineStyle]) => {
+    candleSeries.createPriceLine({
+      price,
+      color,
+      lineWidth: title === "Current" ? 2 : 1,
+      lineStyle,
+      axisLabelVisible: true,
+      title,
+    });
+  });
+
+  const lastTime = candles.at(-1)?.time;
+  if (lastTime) {
+    candleSeries.setMarkers([
+      {
+        time: lastTime,
+        position: "inBar",
+        color: palette.current,
+        shape: "circle",
+        text: "Current",
+      },
+      {
+        time: lastTime,
+        position: levels.price <= levels.entryHigh ? "belowBar" : "aboveBar",
+        color: palette.entry,
+        shape: "arrowUp",
+        text: "Entry zone",
+      },
+      {
+        time: lastTime,
+        position: "aboveBar",
+        color: palette.target,
+        shape: "arrowUp",
+        text: "TP ladder",
+      },
+    ]);
+  }
+
+  chart.timeScale().fitContent();
+  currentMaxExecutionChart = chart;
+  currentMaxExecutionResizeObserver = new ResizeObserver(([entry]) => {
+    const width = Math.floor(entry.contentRect.width);
+    const height = Math.max(Math.floor(entry.contentRect.height), 300);
+    chart.applyOptions({ width, height });
+    chart.timeScale().fitContent();
+  });
+  currentMaxExecutionResizeObserver.observe(maxExecutionChartHost);
 }
 
 function setTextIfExists(selector, value) {
@@ -3222,6 +3514,7 @@ function renderCompany(id) {
   const resolved = opportunity.resolved;
   currentCompanyId = company.id;
   renderTradingViewChart(company);
+  renderMaxExecutionChart(company, opportunity, resolved);
   if (tickerFilter) {
     tickerFilter.value = currentFilters.selectedTickerId;
   }
@@ -3543,6 +3836,7 @@ function applyTheme(theme) {
   themeToggle.title = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
   window.localStorage.setItem("golden-pocket-theme", theme);
   renderTradingViewChart(companyUniverseById.get(currentCompanyId), { force: true });
+  renderMaxExecutionChart(companyUniverseById.get(currentCompanyId));
 }
 
 function flashLayoutTarget(section) {
