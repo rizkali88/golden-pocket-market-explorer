@@ -27,6 +27,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--research-workers", type=int, default=4)
     parser.add_argument("--research-batch-size", type=int, default=20)
     parser.add_argument("--research-pause-seconds", type=float, default=0.25)
+    parser.add_argument("--daily-history-range", default="10y")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--force-refresh", action="store_true")
     parser.add_argument(
@@ -68,6 +69,7 @@ def main() -> int:
         pause_seconds=args.research_pause_seconds,
         limit=args.limit,
         force_refresh=args.force_refresh,
+        daily_history_range=args.daily_history_range,
         fmp_api_key=args.fmp_api_key,
         fmp_cache_hours=args.fmp_cache_hours,
         skip_fmp=args.skip_fmp,

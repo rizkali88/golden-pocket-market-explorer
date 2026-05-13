@@ -130,7 +130,7 @@ Notes:
 
 - This keeps recurring directory refreshes on a `zero-dollar` data stack, but it is not a full real-time price feed.
 - The SEC requires a declared user agent and fair-access behavior, with a published max rate of `10 requests/second`.
-- The page uses automatic price-history modeling for research-ready tickers and can add FMP fundamentals when `FMP_API_KEY` is available.
+- The page uses automatic 10-year daily price-history modeling for research-ready tickers and can add FMP fundamentals when `FMP_API_KEY` is available.
 
 ## Automatic Research Profiles
 
@@ -150,17 +150,19 @@ Outputs:
 How it works:
 
 1. Loads the SEC-backed ticker universe
-2. Pulls 1-year daily market history in batches
+2. Pulls 10-year daily market history in batches
 3. Computes automatic trend, rebound, risk, sector-support, and confidence scores
 4. Generates `bear`, `base`, and `bull` targets plus a recommended method lens
 5. Optionally enriches fundamentals from Financial Modeling Prep when `FMP_API_KEY` is configured
 6. Merges the generated profiles into the webpage, while manual pilot profiles still override the automated output where deeper research exists
+7. Keeps intraday `1m`, `15m`, and `4h` pulls on-demand for the selected ticker through the live FMP chart feed instead of storing intraday history for the whole universe
 
 Useful options:
 
 ```powershell
 & 'C:\Users\aliri\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' build_research_profiles.py --limit 250
 & 'C:\Users\aliri\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' build_research_profiles.py --batch-size 20 --max-workers 4 --pause-seconds 0.2
+& 'C:\Users\aliri\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' build_research_profiles.py --daily-history-range 10y
 ```
 
 ### Financial Modeling Prep Fundamentals

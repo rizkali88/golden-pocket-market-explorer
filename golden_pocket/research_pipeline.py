@@ -21,6 +21,8 @@ from golden_pocket.market_pipeline import DEFAULT_USER_AGENT
 
 YAHOO_SPARK_URL = "https://query1.finance.yahoo.com/v7/finance/spark"
 FMP_STABLE_BASE_URL = "https://financialmodelingprep.com/stable"
+DEFAULT_DAILY_HISTORY_RANGE = "10y"
+DAILY_HISTORY_INTERVAL = "1d"
 VALID_INSTRUMENT_TYPES = {"EQUITY", "ETF"}
 FUNDAMENTAL_VALUE_FIELDS = {
     "marketCap",
@@ -130,6 +132,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Ignore cache freshness and pull fresh market data.",
     )
     parser.add_argument(
+        "--daily-history-range",
+        default=DEFAULT_DAILY_HISTORY_RANGE,
+        help="Daily static history range to request for each ticker, e.g. 1y, 5y, 10y.",
+    )
+    parser.add_argument(
         "--fmp-api-key",
         default=os.environ.get("FMP_API_KEY"),
         help="Optional Financial Modeling Prep API key. Defaults to FMP_API_KEY from the environment.",
@@ -175,7 +182,12 @@ def cache_is_fresh(path: Path, cache_hours: float) -> bool:
 
 
 def load_cached_price_payload(
-    cache_path: Path, cache_hours: float, force_refresh: bool
+    cache_path: Path,
+    cache_hours: float,
+    force_refresh: bool,
+    *,
+    history_range: str,
+    history_interval: str = DAILY_HISTORY_INTERVAL,
 ) -> dict[str, Any] | None:
     if force_refresh or not cache_is_fresh(cache_path, cache_hours):
         return None
@@ -186,6 +198,9 @@ def load_cached_price_payload(
     if payload.get("close") and not all(
         isinstance(payload.get(field), list) for field in ("open", "high", "low", "volume")
     ):
+        return None
+    meta = payload.get("meta") or {}
+    if meta.get("range") != history_range or meta.get("dataGranularity") != history_interval:
         return None
     return payload
 
@@ -213,13 +228,14 @@ def load_cached_rows(
 
 
 def fetch_spark_batch(
-    batch: list[dict[str, Any]], user_agent: str, timeout: float
+    batch: list[dict[str, Any]], user_agent: str, timeout: float, history_range: str
 ) -> dict[str, dict[str, Any]]:
     symbols = ",".join(item["ticker"] for item in batch)
     url = (
         f"{YAHOO_SPARK_URL}?symbols="
         f"{urllib.parse.quote(symbols, safe=',.-^=')}"
-        "&range=1y&interval=1d&indicators=quote&includeTimestamps=true"
+        f"&range={urllib.parse.quote(history_range)}&interval={DAILY_HISTORY_INTERVAL}"
+        "&indicators=quote&includeTimestamps=true"
     )
     request = Request(url, headers={"User-Agent": user_agent})
     with urlopen(request, timeout=timeout) as response:
@@ -256,6 +272,7 @@ def ensure_price_history(
     max_workers: int,
     pause_seconds: float,
     force_refresh: bool,
+    history_range: str = DEFAULT_DAILY_HISTORY_RANGE,
 ) -> dict[str, dict[str, Any]]:
     price_cache_dir = cache_dir / "spark"
     price_cache_dir.mkdir(parents=True, exist_ok=True)
@@ -265,7 +282,12 @@ def ensure_price_history(
     for record in records:
         ticker = record["ticker"]
         cache_path = price_cache_dir / f"{ticker}.json"
-        cached = load_cached_price_payload(cache_path, cache_hours, force_refresh)
+        cached = load_cached_price_payload(
+            cache_path,
+            cache_hours,
+            force_refresh,
+            history_range=history_range,
+        )
         if cached is not None:
             resolved[ticker] = cached
         elif safe_for_spark(ticker):
@@ -276,7 +298,12 @@ def ensure_price_history(
         return resolved
 
     def worker(batch: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-        result = fetch_spark_batch(batch, user_agent=user_agent, timeout=timeout)
+        result = fetch_spark_batch(
+            batch,
+            user_agent=user_agent,
+            timeout=timeout,
+            history_range=history_range,
+        )
         time.sleep(pause_seconds)
         return result
 
@@ -677,8 +704,9 @@ def build_metrics(record: dict[str, Any], market_payload: dict[str, Any]) -> Tic
     if price is None or len(closes) < 140 or instrument_type not in VALID_INSTRUMENT_TYPES:
         return None
 
-    high_52w = float(meta.get("fiftyTwoWeekHigh") or max(closes))
-    low_52w = float(meta.get("fiftyTwoWeekLow") or min(closes))
+    recent_closes = closes[-252:] if len(closes) > 252 else closes
+    high_52w = float(meta.get("fiftyTwoWeekHigh") or max(recent_closes))
+    low_52w = float(meta.get("fiftyTwoWeekLow") or min(recent_closes))
     regular_volume = float(meta.get("regularMarketVolume") or 0.0)
     below_high_pct = max(0.0, (1.0 - price / high_52w) * 100.0) if high_52w else 0.0
     liquidity_estimate = regular_volume * price
@@ -1016,9 +1044,11 @@ def write_outputs(payload: dict[str, Any], output_dir: Path) -> tuple[Path, Path
 
 
 def history_chunk_key(ticker: str) -> str:
-    first = (ticker or "_")[0].lower()
+    compact = "".join(char.lower() if char.isalnum() else "_" for char in (ticker or "")[:2])
+    compact = compact.ljust(2, "_")
+    first = compact[0]
     if first.isalpha():
-        return first
+        return compact
     if first.isdigit():
         return f"n{first}"
     return "other"
@@ -1100,6 +1130,7 @@ def write_price_history_outputs(
     output_dir: Path,
     *,
     generated_at: str,
+    history_range: str,
 ) -> tuple[Path, list[Path]]:
     history_dir = output_dir / "history"
     history_dir.mkdir(parents=True, exist_ok=True)
@@ -1134,8 +1165,8 @@ def write_price_history_outputs(
         "generatedAt": generated_at,
         "source": {
             "marketHistory": YAHOO_SPARK_URL,
-            "range": "1y",
-            "interval": "1d",
+            "range": history_range,
+            "interval": DAILY_HISTORY_INTERVAL,
             "note": "Static daily price-history chunks are generated server-side so the webapp can load selected ticker charts without exposing API keys.",
         },
         "chunks": ticker_to_chunk,
@@ -1162,6 +1193,7 @@ def build_research_profiles(
     pause_seconds: float,
     limit: int | None,
     force_refresh: bool,
+    daily_history_range: str = DEFAULT_DAILY_HISTORY_RANGE,
     fmp_api_key: str | None = None,
     fmp_cache_hours: float = 24.0,
     skip_fmp: bool = False,
@@ -1180,6 +1212,7 @@ def build_research_profiles(
         max_workers=max_workers,
         pause_seconds=pause_seconds,
         force_refresh=force_refresh,
+        history_range=daily_history_range,
     )
 
     metrics: list[TickerMetrics] = []
@@ -1210,7 +1243,13 @@ def build_research_profiles(
             "profiles": [],
         }
         write_outputs(payload, output_dir)
-        write_price_history_outputs({}, [], output_dir, generated_at=generated_at)
+        write_price_history_outputs(
+            {},
+            [],
+            output_dir,
+            generated_at=generated_at,
+            history_range=daily_history_range,
+        )
         return payload
 
     sector_context, global_context = compute_sector_context(metrics)
@@ -1253,8 +1292,9 @@ def build_research_profiles(
         "source": {
             "marketHistory": YAHOO_SPARK_URL,
             "notes": [
-                "Generated market profiles are built automatically from 1-year daily price history plus the SEC-based universe directory.",
+                f"Generated market profiles are built automatically from {daily_history_range} daily price history plus the SEC-based universe directory.",
                 "When FMP_API_KEY is configured, fundamentals are enriched from Financial Modeling Prep bulk datasets without exposing the API key in the static webpage.",
+                "Intraday 1-minute, 15-minute, and 4-hour candles are intentionally pulled on demand only for the selected ticker when the live FMP feed is enabled.",
                 "These are model-generated targets, not human-authored investment theses and not sell-side analyst price targets.",
                 "Deep research pilot profiles can still override these automated outputs where richer manual work exists.",
             ],
@@ -1269,6 +1309,7 @@ def build_research_profiles(
         (profile["ticker"] for profile in profiles),
         output_dir,
         generated_at=generated_at,
+        history_range=daily_history_range,
     )
     print(
         f"Generated {stats['researchReadyTickers']} research-ready profiles "
@@ -1298,6 +1339,7 @@ def main() -> int:
         pause_seconds=args.pause_seconds,
         limit=args.limit,
         force_refresh=args.force_refresh,
+        daily_history_range=args.daily_history_range,
         fmp_api_key=args.fmp_api_key,
         fmp_cache_hours=args.fmp_cache_hours,
         skip_fmp=args.skip_fmp,

@@ -182,7 +182,7 @@
                   </aside>
                 </div>
                 <p class="chart-panel__note">
-                  Max overlays are generated from price, 52-week structure, Fibonacci retracements, Elliott-style impulse mapping, and ICT liquidity proxies. Line mode can use cached daily history; true candles and 1m, 15m, or 4h intervals use FMP OHLC data when connected. Live feed only updates the current bar.
+                  Max overlays are generated from price, 52-week structure, Fibonacci retracements, Elliott-style impulse mapping, and ICT liquidity proxies. Daily, weekly, and monthly modes use cached 10-year history; 1m, 15m, and 4h intervals pull FMP data on demand for the selected ticker when live feed is connected. Live feed only updates the current bar.
                 </p>
               </section>
             </div>
@@ -351,9 +351,9 @@
 
     <script src="./data/market_universe.js?v=20260513-table-chart-cleanup"></script>
     <script src="./data/research_profiles.js?v=20260513-table-chart-cleanup"></script>
-    <script src="./data/history/index.js?v=20260513-max-history"></script>
+    <script src="./data/history/index.js?v=20260513-10y-history"></script>
     <script src="./data/live_config.js?v=20260513-fmp-live"></script>
     <script src="https://unpkg.com/lightweight-charts@4.2.2/dist/lightweight-charts.standalone.production.js"></script>
-    <script src="./app.js?v=20260513-fmp-live-chart"></script>
+    <script src="./app.js?v=20260513-10y-history"></script>
   </body>
 </html>

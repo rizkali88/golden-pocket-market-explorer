@@ -6,8 +6,10 @@ from golden_pocket.research_pipeline import (
     build_scores,
     build_targets,
     build_symbol_map,
+    build_compact_price_history,
     compact_fundamentals,
     first_number,
+    history_chunk_key,
     parse_fmp_response,
 )
 
@@ -86,6 +88,27 @@ class ResearchPipelineTests(unittest.TestCase):
             )["marketCap"],
             10,
         )
+
+    def test_history_chunks_are_small_prefixes(self) -> None:
+        self.assertEqual(history_chunk_key("AAPL"), "aa")
+        self.assertEqual(history_chunk_key("BRK.B"), "br")
+        self.assertEqual(history_chunk_key("7ABC"), "n7")
+
+    def test_compact_price_history_preserves_ohlcv(self) -> None:
+        compact = build_compact_price_history(
+            {
+                "meta": {"range": "10y", "dataGranularity": "1d"},
+                "timestamp": [1, 2],
+                "open": [10.0, 11.0],
+                "high": [12.0, 13.0],
+                "low": [9.0, 10.0],
+                "close": [11.0, 12.0],
+                "volume": [100, 200],
+            }
+        )
+        self.assertEqual(compact["r"], "10y")
+        self.assertEqual(compact["g"], "1d")
+        self.assertEqual(compact["o"], [10.0, 11.0])
 
 
 if __name__ == "__main__":

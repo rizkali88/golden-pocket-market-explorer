@@ -1100,6 +1100,8 @@ const MAX_EXECUTION_RANGES = [
   { id: "6m", label: "6M", days: 186 },
   { id: "ytd", label: "YTD", ytd: true },
   { id: "1y", label: "1Y", days: 370 },
+  { id: "5y", label: "5Y", days: 365 * 5 + 2 },
+  { id: "10y", label: "10Y", days: 365 * 10 + 3 },
   { id: "all", label: "All" },
 ];
 
@@ -1112,9 +1114,9 @@ const MAX_EXECUTION_INTERVALS = [
   { id: "1min", label: "1m", fmpInterval: "1min", maxDays: 5 },
   { id: "15min", label: "15m", fmpInterval: "15min", maxDays: 45 },
   { id: "4hour", label: "4H", fmpInterval: "4hour", maxDays: 370 },
-  { id: "1d", label: "1D", fmpInterval: "1day", maxDays: 370 },
-  { id: "1w", label: "1W", fmpInterval: "1day", aggregateInterval: "1w", maxDays: 370 },
-  { id: "1mo", label: "1M", fmpInterval: "1day", aggregateInterval: "1mo", maxDays: 370 },
+  { id: "1d", label: "1D", fmpInterval: "1day", maxDays: 365 * 10 + 3 },
+  { id: "1w", label: "1W", fmpInterval: "1day", aggregateInterval: "1w", maxDays: 365 * 10 + 3 },
+  { id: "1mo", label: "1M", fmpInterval: "1day", aggregateInterval: "1mo", maxDays: 365 * 10 + 3 },
 ];
 
 const MAX_EXECUTION_DRAWINGS_STORAGE_KEY = "golden-pocket-max-drawings";
@@ -2530,9 +2532,7 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
   const intervalMeta = getSelectedMaxExecutionInterval();
   const rangeMeta = getSelectedMaxExecutionRange();
   const isIntradayInterval = ["1min", "15min", "4hour"].includes(intervalMeta?.id);
-  const usesFmpHistory =
-    isIntradayInterval ||
-    (currentMaxExecutionChartTypeId === "candles" && hasFmpLiveSource() && Boolean(intervalMeta?.fmpInterval));
+  const usesFmpHistory = isIntradayInterval;
   renderMaxExecutionRangeSwitcher();
   renderMaxExecutionChartTypeSwitcher();
   renderMaxExecutionIntervalSwitcher();
@@ -2559,7 +2559,9 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
   const loadingText =
     usesFmpHistory && hasFmpLiveSource()
       ? `Loading FMP ${intervalMeta.label} bars for ${company.ticker}.`
-      : "Loading cached daily history for the selected ticker.";
+      : usesFmpHistory
+        ? "Connect FMP live feed to load selected-ticker intraday history."
+        : "Loading cached 10-year daily history for the selected ticker.";
   maxExecutionChartHost.replaceChildren(makeMaxExecutionPlaceholder(loadingText));
 
   let liveQuote = null;
@@ -2599,10 +2601,10 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
       liveQuote?.price && usesFmpHistory
         ? `FMP ${intervalMeta.label} OHLC bars plus live quote`
         : liveQuote?.price
-          ? "FMP live quote with cached daily history"
+          ? "FMP live quote with cached 10-year daily history"
           : usesFmpHistory
             ? `FMP ${intervalMeta.label} OHLC bars`
-            : "cached daily history";
+            : "cached 10-year daily history";
     maxExecutionSummary.textContent = levels
       ? `Technical call is ${maxView.verdict} with ${maxView.score}/100 conviction. Max is using ${feedLabel}; current price is ${formatMoney(levels.price)}, entry is near ${formatPriceRange(levels.entryLow, levels.entryHigh)}, stop is ${formatMoney(levels.stop)}, and targets are ${formatMoney(levels.target1)}, ${formatMoney(levels.target2)}, then ${formatMoney(levels.target3)}.`
       : `${chartCompany.ticker} is not research-ready enough for Max to draw entry, stop, and take-profit levels yet.`;
@@ -2648,10 +2650,10 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
   if (!history) {
     const missingMessage =
       usesFmpHistory && !hasFmpLiveSource()
-        ? "Connect an FMP key to use 1m, 15m, 4h, or true OHLC candle history. Daily line mode can still use cached history."
+        ? "Connect an FMP key to use 1m, 15m, or 4h intraday history. Daily, weekly, and monthly modes use cached 10-year history."
         : usesFmpHistory
           ? "FMP did not return enough intraday bars for this ticker/range yet. Try a wider range or check the FMP key/proxy."
-          : "No cached daily history chunk is available for this ticker yet. Re-run the market refresh to publish it.";
+          : "No cached 10-year daily history chunk is available for this ticker yet. Re-run the market refresh to publish it.";
     maxExecutionChartHost.replaceChildren(
       makeMaxExecutionPlaceholder(missingMessage),
     );
@@ -2662,7 +2664,7 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
   const historyData = getMaxExecutionHistoryData(history);
   if (currentMaxExecutionChartTypeId === "candles" && !historyData.hasCandles) {
     maxExecutionChartHost.replaceChildren(
-      makeMaxExecutionPlaceholder("Candles need OHLC history. Connect FMP for true candle data or switch this chart back to Line."),
+      makeMaxExecutionPlaceholder("Candles need OHLC history. Re-run the 10-year market refresh or switch this chart back to Line."),
     );
     scheduleMaxLiveRefresh(company);
     return;
