@@ -4,14 +4,29 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golden Pocket Market Explorer - Working Draft</title>
-    <link rel="stylesheet" href="./styles.css?v=20260513-compact-bars" />
+    <link rel="stylesheet" href="./styles.css?v=20260513-toolbar-refine" />
   </head>
   <body class="workbench-page">
     <div class="app-shell">
       <aside class="sidebar panel panel--glass" data-layout-id="1" data-layout-label="Toolbar">
         <div class="sidebar__brand">
           <div class="brand">
-            <div class="brand__mark">GP</div>
+            <div class="brand__mark brand__mark--icon" role="img" aria-label="Golden Pocket Lab icon">
+              <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+                <defs>
+                  <linearGradient id="gpl-mark" x1="10" y1="8" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stop-color="#ffc06f" />
+                    <stop offset="0.48" stop-color="#7ddbd4" />
+                    <stop offset="1" stop-color="#193143" />
+                  </linearGradient>
+                </defs>
+                <rect x="5" y="5" width="54" height="54" rx="17" fill="url(#gpl-mark)" />
+                <path d="M18 22h28v16c0 8-5.9 14-14 14s-14-6-14-14V22Z" fill="#102030" opacity="0.68" />
+                <path d="M18 30c8.4-6.7 19.6-6.7 28 0" fill="none" stroke="#fff5df" stroke-width="3.6" stroke-linecap="round" />
+                <path d="M22 41l7-7 6 5 8-12" fill="none" stroke="#7ee4d9" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" />
+                <circle cx="43" cy="27" r="3.4" fill="#ffc06f" />
+              </svg>
+            </div>
             <div class="brand__text">
               <p class="eyebrow">Golden Pocket Lab</p>
               <strong class="page-variant">Working Draft</strong>
@@ -64,7 +79,20 @@
 
         <div class="sidebar__actions">
           <button class="layout-toggle" id="layout-toggle" type="button" aria-pressed="false">Layout mode</button>
-          <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Dark mode</button>
+          <button class="theme-toggle theme-toggle--compact" id="theme-toggle" type="button" aria-pressed="false" aria-label="Toggle color theme">
+            <span class="theme-toggle__icon theme-toggle__icon--light" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <circle cx="12" cy="12" r="4.2" />
+                <path d="M12 2.8v2.4M12 18.8v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.8 12h2.4M18.8 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7" />
+              </svg>
+            </span>
+            <span class="theme-toggle__thumb" aria-hidden="true"></span>
+            <span class="theme-toggle__icon theme-toggle__icon--dark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M19.2 14.6A7.2 7.2 0 0 1 9.4 4.8 8 8 0 1 0 19.2 14.6Z" />
+              </svg>
+            </span>
+          </button>
         </div>
       </aside>
 

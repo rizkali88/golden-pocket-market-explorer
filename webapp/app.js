@@ -3389,8 +3389,10 @@ function updateReadiness() {
 
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
-  themeToggle.textContent = theme === "dark" ? "Light mode" : "Dark mode";
+  themeToggle.dataset.activeTheme = theme;
   themeToggle.setAttribute("aria-pressed", String(theme === "dark"));
+  themeToggle.setAttribute("aria-label", theme === "dark" ? "Switch to light mode" : "Switch to dark mode");
+  themeToggle.title = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
   window.localStorage.setItem("golden-pocket-theme", theme);
 }
 
