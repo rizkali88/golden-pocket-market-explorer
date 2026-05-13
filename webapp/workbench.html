@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golden Pocket Market Explorer - Working Draft</title>
-    <link rel="stylesheet" href="./styles.css?v=20260513-workbench-repair" />
+    <link rel="stylesheet" href="./styles.css?v=20260513-topbar-table" />
   </head>
-  <body>
+  <body class="workbench-page">
     <div class="app-shell">
       <aside class="sidebar panel panel--glass" data-layout-id="1" data-layout-label="Toolbar">
         <div class="sidebar__brand">
@@ -68,6 +68,43 @@
               methodology here while keeping the original dashboard available at
               <a href="./index.html">index.html</a>.
             </p>
+          </section>
+
+          <section class="panel reveal opportunity-panel" data-layout-id="7" data-layout-label="Opportunity Table">
+            <label class="report-search opportunity-search">
+              <span>Search company, ticker, sector, or industry</span>
+              <input id="ticker-search" type="search" placeholder="Try Eli Lilly, LLY, Health Care, biotech..." />
+            </label>
+            <div class="opportunity-panel__header">
+              <div class="section-heading">
+                <p class="eyebrow">Opportunity Table</p>
+                <h2 id="roster-title">Scan decisions across the filtered universe</h2>
+              </div>
+              <div class="opportunity-panel__scenario">
+                <p class="eyebrow">Scenario</p>
+                <div class="scenario-switcher" id="scenario-switcher" aria-label="Scenario switcher"></div>
+              </div>
+            </div>
+            <div class="roster-toolbar">
+              <p class="roster-note" id="company-count"></p>
+              <p class="roster-note roster-note--muted" id="roster-note">
+                Click any row to load John and Max's detailed dashboard for that ticker.
+              </p>
+            </div>
+            <div class="opportunity-table-wrap">
+              <table class="opportunity-table">
+                <thead>
+                  <tr>
+                    <th>Company</th>
+                    <th>Classification</th>
+                    <th>John's Decision</th>
+                    <th>Max Decision</th>
+                    <th>Conviction Rate</th>
+                  </tr>
+                </thead>
+                <tbody id="opportunity-table-body"></tbody>
+              </table>
+            </div>
           </section>
 
           <section class="panel reveal agent-dashboard-panel" id="agent-dashboard-panel" data-layout-id="5.5" data-layout-label="John and Max Dashboards">
@@ -158,46 +195,6 @@
             </div>
           </section>
 
-          <section class="panel reveal opportunity-panel" data-layout-id="7" data-layout-label="Opportunity Table">
-            <label class="report-search opportunity-search">
-              <span>Search company, ticker, sector, or industry</span>
-              <input id="ticker-search" type="search" placeholder="Try Eli Lilly, LLY, Health Care, biotech..." />
-            </label>
-            <div class="opportunity-panel__header">
-              <div class="section-heading">
-                <p class="eyebrow">Opportunity Table</p>
-                <h2 id="roster-title">Scan the filtered ticker universe</h2>
-              </div>
-              <div class="opportunity-panel__scenario">
-                <p class="eyebrow">Scenario</p>
-                <div class="scenario-switcher" id="scenario-switcher" aria-label="Scenario switcher"></div>
-              </div>
-            </div>
-            <div class="roster-toolbar">
-              <p class="roster-note" id="company-count"></p>
-              <p class="roster-note roster-note--muted" id="roster-note">
-                The active table ranks matching tickers by the current setup score and updates targets using the selected scenario and target lens.
-              </p>
-            </div>
-            <div class="opportunity-table-wrap">
-              <table class="opportunity-table">
-                <thead>
-                  <tr>
-                    <th>Company</th>
-                    <th>Classification</th>
-                    <th>Setup</th>
-                    <th>Model</th>
-                    <th>Scenario</th>
-                    <th>52W Range</th>
-                    <th>Trend</th>
-                    <th>Liquidity</th>
-                  </tr>
-                </thead>
-                <tbody id="opportunity-table-body"></tbody>
-              </table>
-            </div>
-          </section>
-
         <section class="panel reveal" data-layout-id="11" data-layout-label="Trigger Lab">
           <div class="section-heading">
             <p class="eyebrow">Trigger Lab</p>
@@ -270,8 +267,8 @@
 
     <aside class="layout-legend" id="layout-legend" hidden aria-live="polite"></aside>
 
-    <script src="./data/market_universe.js?v=20260513-workbench-repair"></script>
-    <script src="./data/research_profiles.js?v=20260513-workbench-repair"></script>
-    <script src="./app.js?v=20260513-workbench-repair"></script>
+    <script src="./data/market_universe.js?v=20260513-topbar-table"></script>
+    <script src="./data/research_profiles.js?v=20260513-topbar-table"></script>
+    <script src="./app.js?v=20260513-topbar-table"></script>
   </body>
 </html>

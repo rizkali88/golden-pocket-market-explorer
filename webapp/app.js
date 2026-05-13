@@ -3227,13 +3227,9 @@ function renderOpportunityTable() {
     ...visibleUniverse.map((company) => {
       const opportunity = opportunityCache.get(company.id);
       const resolved = opportunity.resolved;
-      const rangePosition = opportunity.rangePositionPct;
-      const methodLabel = getMethodById(resolved.effectiveMethodId).label;
-      const recommendedLabel = getMethodById(resolved.meta.recommendedMethod).label;
-      const activeTarget =
-        resolved.isResearchReady && company.price != null
-          ? company.price * (1 + resolved.activeTargets[currentScenarioId] / 100)
-          : null;
+      const johnView = buildJohnView(company, opportunity, resolved);
+      const maxView = buildMaxView(company, opportunity, resolved);
+      const decision = combineTradingDecision(johnView, maxView);
       const row = document.createElement("tr");
       row.dataset.id = company.id;
       row.innerHTML = `
@@ -3254,41 +3250,23 @@ function renderOpportunityTable() {
         </td>
         <td>
           <div class="opportunity-table__cell">
-            <div class="opportunity-table__score">
-              <strong>${opportunity.opportunityScore}</strong>
-              <small>/100</small>
+            <span class="opportunity-table__decision opportunity-table__decision--${johnView.verdict.toLowerCase()}">${johnView.verdict}</span>
+            <small>John score ${johnView.score}/100</small>
+          </div>
+        </td>
+        <td>
+          <div class="opportunity-table__cell">
+            <span class="opportunity-table__decision opportunity-table__decision--${maxView.verdict.toLowerCase()}">${maxView.verdict}</span>
+            <small>Max score ${maxView.score}/100</small>
+          </div>
+        </td>
+        <td>
+          <div class="opportunity-table__cell opportunity-table__conviction">
+            <strong>${decision.conviction}%</strong>
+            <div class="opportunity-table__conviction-track">
+              <i class="opportunity-table__conviction-fill" style="width:${decision.conviction}%"></i>
             </div>
-            <small>Confidence ${opportunity.confidenceScore}/100</small>
-          </div>
-        </td>
-        <td>
-          <div class="opportunity-table__cell">
-            <strong>${methodLabel}</strong>
-            <small>Recommended ${recommendedLabel}</small>
-          </div>
-        </td>
-        <td>
-          <div class="opportunity-table__cell">
-            <strong>${activeTarget == null ? "Pending" : formatMoney(activeTarget)}</strong>
-            <small>${activeTarget == null ? "Scenario target pending" : `${formatPercent(resolved.activeTargets[currentScenarioId])} from ${formatMoney(company.price)}`}</small>
-          </div>
-        </td>
-        <td>
-          <div class="opportunity-table__cell">
-            <strong>${company.fiftyTwoWeekLow != null && company.fiftyTwoWeekHigh != null ? `${formatMoney(company.fiftyTwoWeekLow)} - ${formatMoney(company.fiftyTwoWeekHigh)}` : "Pending"}</strong>
-            <small>${rangePosition == null ? "Range position pending" : `${Math.round(rangePosition)}% through range`}</small>
-          </div>
-        </td>
-        <td>
-          <div class="opportunity-table__cell">
-            <strong>${company.threeMonthReturn == null ? "Pending" : formatPercent(company.threeMonthReturn)}</strong>
-            <small>Trend ${opportunity.trendScore}/100</small>
-          </div>
-        </td>
-        <td>
-          <div class="opportunity-table__cell">
-            <strong>${company.avgDailyDollarVolume == null ? (company.liquidityBucket ?? "Pending") : formatCompactNumber(company.avgDailyDollarVolume, { currency: true })}</strong>
-            <small>${company.liquidityBucket ?? resolved.meta.coverage} liquidity</small>
+            <small>Final call: ${decision.finalCall}</small>
           </div>
         </td>
       `;

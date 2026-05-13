@@ -106,6 +106,69 @@ body::before {
   justify-content: center;
 }
 
+.workbench-page .app-shell {
+  width: min(1640px, calc(100% - 32px));
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+
+.workbench-page .report-shell {
+  grid-column: 1;
+}
+
+.workbench-page .sidebar {
+  grid-column: 1;
+  position: sticky;
+  top: 12px;
+  left: auto;
+  width: 100%;
+  z-index: 60;
+  grid-template-columns: minmax(260px, 0.72fr) minmax(0, 2.3fr) auto;
+  align-items: end;
+  padding: 16px;
+  border-radius: 24px;
+}
+
+.workbench-page .sidebar__brand {
+  align-content: end;
+}
+
+.workbench-page .sidebar__filters {
+  min-width: 0;
+}
+
+.workbench-page .sidebar__filter-stack {
+  grid-template-columns: minmax(145px, 0.75fr) minmax(170px, 0.85fr) minmax(240px, 1.2fr) minmax(220px, 0.95fr) minmax(120px, 0.52fr);
+  align-items: end;
+}
+
+.workbench-page .filter-switch {
+  min-height: 58px;
+  align-content: center;
+}
+
+.workbench-page .filter-switch small {
+  display: none;
+}
+
+.workbench-page .filter-button {
+  min-height: 58px;
+}
+
+.workbench-page .sidebar__actions {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.workbench-page .sidebar__actions .layout-toggle,
+.workbench-page .sidebar__actions .theme-toggle {
+  min-height: 58px;
+  white-space: nowrap;
+}
+
 .section-heading--tight {
   margin-bottom: 0;
 }
@@ -736,7 +799,7 @@ body::before {
 
 .opportunity-table {
   width: 100%;
-  min-width: 1120px;
+  min-width: 880px;
   border-collapse: collapse;
 }
 
@@ -836,6 +899,69 @@ html:not([data-theme="dark"]) .opportunity-table thead th {
   background: rgba(242, 168, 90, 0.12);
   border-color: rgba(242, 168, 90, 0.24);
   color: #d48f37;
+}
+
+.opportunity-table__decision {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  min-width: 76px;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.opportunity-table__decision--buy,
+.opportunity-table__decision--enter {
+  border-color: rgba(43, 111, 89, 0.48);
+  background: rgba(43, 111, 89, 0.14);
+  color: var(--success, var(--good));
+}
+
+.opportunity-table__decision--watch,
+.opportunity-table__decision--wait {
+  border-color: rgba(201, 111, 59, 0.5);
+  background: rgba(201, 111, 59, 0.14);
+  color: var(--accent-2);
+}
+
+.opportunity-table__decision--avoid {
+  border-color: rgba(168, 91, 50, 0.58);
+  background: rgba(168, 91, 50, 0.16);
+  color: var(--warn);
+}
+
+.opportunity-table__conviction {
+  display: grid;
+  gap: 7px;
+  min-width: 150px;
+}
+
+.opportunity-table__conviction strong {
+  font-family: "Georgia", "Palatino Linotype", serif;
+  font-size: 1.55rem;
+  line-height: 1;
+}
+
+.opportunity-table__conviction-track {
+  overflow: hidden;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(127, 139, 150, 0.22);
+}
+
+.opportunity-table__conviction-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
 }
 
 .detail-card {
@@ -2129,6 +2255,12 @@ html[data-theme="dark"] .filter-field option {
   overflow: visible;
 }
 
+.workbench-page .sidebar.panel {
+  position: sticky;
+  top: 12px;
+  width: 100%;
+}
+
 @media (max-width: 1100px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -2149,6 +2281,40 @@ html[data-theme="dark"] .filter-field option {
     overflow: visible;
     z-index: auto;
   }
+
+  .workbench-page .sidebar,
+  .workbench-page .sidebar.panel {
+    position: sticky;
+    top: 10px;
+    z-index: 60;
+  }
+
+  .workbench-page .sidebar {
+    grid-template-columns: 1fr;
+  }
+
+  .workbench-page .sidebar__brand {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
+  .workbench-page .sidebar__filter-stack {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workbench-page .filter-field--ticker,
+  .workbench-page .filter-switch {
+    grid-column: span 2;
+  }
+
+  .workbench-page .sidebar__actions {
+    justify-content: stretch;
+  }
+
+  .workbench-page .sidebar__actions .layout-toggle,
+  .workbench-page .sidebar__actions .theme-toggle {
+    flex: 1;
+  }
 }
 
 @media (max-width: 760px) {
@@ -2158,6 +2324,27 @@ html[data-theme="dark"] .filter-field option {
     max-height: none;
     overflow: visible;
     z-index: auto;
+  }
+
+  .workbench-page .sidebar,
+  .workbench-page .sidebar.panel {
+    position: static;
+    z-index: auto;
+  }
+
+  .workbench-page .sidebar__brand,
+  .workbench-page .sidebar__filter-stack,
+  .workbench-page .sidebar__actions {
+    grid-template-columns: 1fr;
+  }
+
+  .workbench-page .filter-field--ticker,
+  .workbench-page .filter-switch {
+    grid-column: auto;
+  }
+
+  .workbench-page .sidebar__actions {
+    display: grid;
   }
 }
 
