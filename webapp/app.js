@@ -2060,7 +2060,9 @@ function syncFiltersUI(filteredUniverse = getFilteredUniverse()) {
     }
   }
 
-  tickerSearch.value = currentFilters.search;
+  if (tickerSearch) {
+    tickerSearch.value = currentFilters.search;
+  }
   if (tickerFilterSearch) {
     tickerFilterSearch.value = currentFilters.tickerOptionSearch;
   }
@@ -2115,17 +2117,23 @@ function renderHero(filteredUniverse) {
     if (heroTitle) {
       heroTitle.textContent = currentFilters.industry;
     }
-    rosterTitle.textContent = `${currentFilters.industry} opportunity table`;
+    if (rosterTitle) {
+      rosterTitle.textContent = `${currentFilters.industry} opportunity table`;
+    }
   } else if (currentFilters.sector !== "All Sectors") {
     if (heroTitle) {
       heroTitle.textContent = `${currentFilters.sector} Opportunity Report`;
     }
-    rosterTitle.textContent = `${currentFilters.sector} opportunity table`;
+    if (rosterTitle) {
+      rosterTitle.textContent = `${currentFilters.sector} opportunity table`;
+    }
   } else {
     if (heroTitle) {
       heroTitle.textContent = "SEC Market Universe";
     }
-    rosterTitle.textContent = "Scan the filtered ticker universe";
+    if (rosterTitle) {
+      rosterTitle.textContent = "Scan the filtered ticker universe";
+    }
   }
 
   const filteredCount = filteredUniverse.length;
@@ -2141,14 +2149,16 @@ function renderHero(filteredUniverse) {
   }
 
   const visibleCount = Math.min(filteredCount, MAX_TABLE_RESULTS);
-  rosterNote.textContent =
-    filteredCount > MAX_TABLE_RESULTS
-      ? `Showing the top ${visibleCount} of ${filteredCount} matching tickers by setup score. Narrow with sector, industry, or search for a tighter working list.`
-      : currentFilters.researchReadyOnly
-        ? `Only research-ready tickers with live scenario predictions are showing in this working list.`
-      : currentFilters.industry === "All Industries"
-        ? `The market directory is loaded. Research-ready names carry active target-method modeling while the broader market stays available for discovery from the same report.`
-        : `Current filtered industry: ${currentFilters.industry}.`;
+  if (rosterNote) {
+    rosterNote.textContent =
+      filteredCount > MAX_TABLE_RESULTS
+        ? `Showing the top ${visibleCount} of ${filteredCount} matching tickers by setup score. Narrow with sector, industry, or search for a tighter working list.`
+        : currentFilters.researchReadyOnly
+          ? `Only research-ready tickers with live scenario predictions are showing in this working list.`
+        : currentFilters.industry === "All Industries"
+          ? `The market directory is loaded. Research-ready names carry active target-method modeling while the broader market stays available for discovery from the same report.`
+          : `Current filtered industry: ${currentFilters.industry}.`;
+  }
 }
 
 function renderScenario(id, options = {}) {
@@ -2659,7 +2669,7 @@ function buildConvictionBar(label, value, detail) {
       <div class="opportunity-table__conviction-track">
         <i class="opportunity-table__conviction-fill" style="width:${clampNumber(value, 0, 100)}%"></i>
       </div>
-      <span class="conviction-bar__value">${Math.round(value)}/100${detail ? ` - ${detail}` : ""}</span>
+      <span class="conviction-bar__value">${Math.round(value)}%${detail ? ` - ${detail}` : ""}</span>
     </div>
   `;
 }
@@ -3435,10 +3445,12 @@ function renderOpportunityTable() {
     visibleModels.splice(MAX_TABLE_RESULTS);
   }
 
-  companyCount.textContent =
-    rankedModels.length > MAX_TABLE_RESULTS
-      ? `${pluralize(rankedModels.length, "company", "companies")} match | showing top ${visibleModels.length} by decision score`
-      : `${pluralize(rankedModels.length, "company", "companies")} shown`;
+  if (companyCount) {
+    companyCount.textContent =
+      rankedModels.length > MAX_TABLE_RESULTS
+        ? `${pluralize(rankedModels.length, "company", "companies")} match | showing top ${visibleModels.length} by decision score`
+        : `${pluralize(rankedModels.length, "company", "companies")} shown`;
+  }
 
   opportunityTableBody.replaceChildren(
     ...visibleModels.map(({ company, johnView, maxView, decision }) => {
@@ -3610,9 +3622,11 @@ function resetFilters() {
   refreshExplorer();
 }
 
-scenarioSwitcher.replaceChildren(
-  ...scenarios.map((scenario) => makeButton(scenario, "switcher-pill", renderScenario)),
-);
+if (scenarioSwitcher) {
+  scenarioSwitcher.replaceChildren(
+    ...scenarios.map((scenario) => makeButton(scenario, "switcher-pill", renderScenario)),
+  );
+}
 
 methodSwitcher.replaceChildren(
   ...targetMethods.map((method) => makeButton(method, "method-pill", renderTargetMethod)),
@@ -3655,10 +3669,12 @@ document.addEventListener("click", (event) => {
   }
 });
 
-tickerSearch.addEventListener("input", (event) => {
-  currentFilters.search = event.target.value;
-  refreshExplorer();
-});
+if (tickerSearch) {
+  tickerSearch.addEventListener("input", (event) => {
+    currentFilters.search = event.target.value;
+    refreshExplorer();
+  });
+}
 
 researchReadyOnlyToggle.addEventListener("change", (event) => {
   currentFilters.researchReadyOnly = event.target.checked;

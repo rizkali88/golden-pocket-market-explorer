@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golden Pocket Market Explorer - Working Draft</title>
-    <link rel="stylesheet" href="./styles.css?v=20260513-chart-workspace" />
+    <link rel="stylesheet" href="./styles.css?v=20260513-table-chart-cleanup" />
   </head>
   <body class="workbench-page">
     <div class="app-shell">
@@ -110,26 +110,6 @@
 
           <div class="market-workspace">
             <section class="panel reveal opportunity-panel" data-layout-id="7" data-layout-label="Opportunity Table">
-              <label class="report-search opportunity-search">
-                <span>Search company, ticker, sector, or industry</span>
-                <input id="ticker-search" type="search" placeholder="Try Eli Lilly, LLY, Health Care, biotech..." />
-              </label>
-              <div class="opportunity-panel__header">
-                <div class="section-heading">
-                  <p class="eyebrow">Opportunity Table</p>
-                  <h2 id="roster-title">Scan decisions across the filtered universe</h2>
-                </div>
-                <div class="opportunity-panel__scenario">
-                  <p class="eyebrow">Scenario</p>
-                  <div class="scenario-switcher" id="scenario-switcher" aria-label="Scenario switcher"></div>
-                </div>
-              </div>
-              <div class="roster-toolbar">
-                <p class="roster-note" id="company-count"></p>
-                <p class="roster-note roster-note--muted" id="roster-note">
-                  Click any row to load the Fundamental and Technical dashboard for that ticker.
-                </p>
-              </div>
               <div class="opportunity-table-wrap">
                 <table class="opportunity-table">
                   <thead>
@@ -138,7 +118,6 @@
                       <th>
                         <button class="table-sort-button" id="final-call-sort" type="button" aria-label="Sort final call">
                           Final Call
-                          <span id="final-call-sort-state">Default</span>
                         </button>
                       </th>
                       <th>Conviction</th>
@@ -150,22 +129,10 @@
             </section>
 
             <section class="panel reveal chart-panel" data-layout-id="8" data-layout-label="TradingView Chart">
-              <div class="chart-panel__header">
-                <div class="section-heading">
-                  <p class="eyebrow">TradingView Chart</p>
-                  <h2 id="tradingview-chart-title">Live chart for the selected ticker</h2>
-                </div>
-                <a class="chart-panel__external" id="tradingview-symbol-link" href="https://www.tradingview.com/" target="_blank" rel="noopener nofollow">
-                  Open in TradingView
-                </a>
-              </div>
               <p class="chart-panel__subtitle" id="tradingview-chart-subtitle">
                 Select a ticker from the table or toolbar to load the interactive TradingView chart.
               </p>
               <div class="tradingview-chart-shell" id="tradingview-chart-host" aria-live="polite"></div>
-              <p class="chart-panel__note">
-                Chart is loaded from TradingView's free Advanced Chart widget. It may show delayed exchange data depending on the symbol and TradingView data availability.
-              </p>
             </section>
           </div>
 
@@ -330,8 +297,8 @@
 
     <aside class="layout-legend" id="layout-legend" hidden aria-live="polite"></aside>
 
-    <script src="./data/market_universe.js?v=20260513-chart-workspace"></script>
-    <script src="./data/research_profiles.js?v=20260513-chart-workspace"></script>
-    <script src="./app.js?v=20260513-chart-workspace"></script>
+    <script src="./data/market_universe.js?v=20260513-table-chart-cleanup"></script>
+    <script src="./data/research_profiles.js?v=20260513-table-chart-cleanup"></script>
+    <script src="./app.js?v=20260513-table-chart-cleanup"></script>
   </body>
 </html>
