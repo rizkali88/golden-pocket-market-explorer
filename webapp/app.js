@@ -1005,6 +1005,9 @@ const tickerFilterOptions = document.querySelector("#ticker-filter-options");
 const tickerFilterSearch = document.querySelector("#ticker-filter-search");
 const tickerSearch = document.querySelector("#ticker-search");
 const researchReadyOnlyToggle = document.querySelector("#research-ready-only");
+const finalCallFilter = document.querySelector("#final-call-filter");
+const finalCallSortButton = document.querySelector("#final-call-sort");
+const finalCallSortState = document.querySelector("#final-call-sort-state");
 const clearFiltersButton = document.querySelector("#clear-filters");
 const universeStatus = document.querySelector("#universe-status");
 const heroTitle = document.querySelector("#hero-title");
@@ -1027,6 +1030,8 @@ const currentFilters = {
   tickerOptionSearch: "",
   search: "",
   researchReadyOnly: false,
+  finalCall: "all",
+  finalCallSort: "none",
 };
 let layoutModeResetTimer = null;
 
@@ -1925,6 +1930,17 @@ function syncFiltersUI(filteredUniverse = getFilteredUniverse()) {
     tickerFilterSearch.value = currentFilters.tickerOptionSearch;
   }
   researchReadyOnlyToggle.checked = currentFilters.researchReadyOnly;
+  if (finalCallFilter) {
+    finalCallFilter.value = currentFilters.finalCall;
+  }
+  if (finalCallSortState) {
+    finalCallSortState.textContent =
+      currentFilters.finalCallSort === "best"
+        ? "Best first"
+        : currentFilters.finalCallSort === "worst"
+          ? "Caution first"
+          : "Default";
+  }
 }
 
 function renderUniverseMeta(filteredUniverse) {
@@ -2501,6 +2517,20 @@ function makeReturnBar({ label, value }) {
   return row;
 }
 
+function buildConvictionBar(label, value, detail) {
+  return `
+    <div class="conviction-bar">
+      <div class="conviction-bar__labels">
+        <span>${label}</span>
+        <span>${Math.round(value)}/100${detail ? ` - ${detail}` : ""}</span>
+      </div>
+      <div class="opportunity-table__conviction-track">
+        <i class="opportunity-table__conviction-fill" style="width:${clampNumber(value, 0, 100)}%"></i>
+      </div>
+    </div>
+  `;
+}
+
 function buildJohnInputTiles(company, opportunity, resolved) {
   const fundamentals = company.fundamentals ?? {};
   const analystUpside = getAnalystUpsidePct(company);
@@ -2525,7 +2555,7 @@ function buildJohnInputTiles(company, opportunity, resolved) {
       value: `${hasValue(fundamentals.revenue) ? formatCompactNumber(fundamentals.revenue, { currency: true }) : "Pending"} / ${hasValue(fundamentals.netIncome) ? formatCompactNumber(fundamentals.netIncome, { currency: true }) : "Pending"}`,
       note: hasValue(fundamentals.netMarginPct)
         ? `Net margin ${formatPercent(fundamentals.netMarginPct)}.`
-        : "John needs profitability and cash-flow depth next.",
+        : "Fundamental view needs profitability and cash-flow depth next.",
       score: hasValue(fundamentals.netMarginPct) ? clampNumber(50 + Number(fundamentals.netMarginPct) * 1.5, 0, 100) : null,
     },
     {
@@ -2577,7 +2607,7 @@ function buildJohnInputTiles(company, opportunity, resolved) {
         ? `${formatMultiple(fundamentals.debtToEquity)} debt/equity`
         : "Pending",
       note: hasValue(fundamentals.debtToEquity)
-        ? "John uses this as a first-pass leverage risk signal."
+        ? "Fundamental view uses this as a first-pass leverage risk signal."
         : "Needs debt maturity, interest cover, and liquidity details.",
       score: hasValue(fundamentals.debtToEquity)
         ? clampNumber(88 - Number(fundamentals.debtToEquity) * 12, 15, 95)
@@ -2688,7 +2718,8 @@ function setDecisionBadge(selector, verdict) {
   badge.classList.add(`decision-badge--${String(verdict).toLowerCase()}`);
 }
 
-function buildJohnView(company, opportunity, resolved) {
+function buildJohnView(company, opportunity, resolved, options = {}) {
+  const includeDetails = options.includeDetails !== false;
   const fundamentals = company.fundamentals ?? {};
   const dataCompleteness = getFundamentalCompleteness(fundamentals);
   const analystUpside = getAnalystUpsidePct(company);
@@ -2736,9 +2767,17 @@ function buildJohnView(company, opportunity, resolved) {
   }
 
   const verdict = totalScore >= 70 ? "Buy" : totalScore >= 52 ? "Watch" : "Avoid";
-  return {
+  const view = {
     verdict,
     score: Math.round(totalScore),
+  };
+
+  if (!includeDetails) {
+    return view;
+  }
+
+  return {
+    ...view,
     inputTiles: buildJohnInputTiles(company, opportunity, resolved),
     targetTiles: buildJohnTargetTiles(company, resolved),
     bars: [
@@ -2836,7 +2875,8 @@ function buildTradeLevels(company, resolved) {
   };
 }
 
-function buildMaxView(company, opportunity, resolved) {
+function buildMaxView(company, opportunity, resolved, options = {}) {
+  const includeDetails = options.includeDetails !== false;
   const levels = buildTradeLevels(company, resolved);
   const rangePosition = opportunity.rangePositionPct ?? 50;
   const entryTimingScore = clampNumber(100 - Math.abs(rangePosition - 55) * 1.7, 0, 100);
@@ -2864,10 +2904,18 @@ function buildMaxView(company, opportunity, resolved) {
         ? "Wait"
         : "Avoid";
 
-  return {
+  const view = {
     verdict,
     score: Math.round(totalScore),
     levels,
+  };
+
+  if (!includeDetails) {
+    return view;
+  }
+
+  return {
+    ...view,
     inputTiles: buildMaxInputTiles(company, opportunity, levels),
     returnBars: buildReturnBars(company),
     bars: [
@@ -2900,7 +2948,7 @@ function renderPriceLadder(levels) {
     return;
   }
   if (!levels) {
-    ladder.textContent = "Attach OHLCV and swing-level data to render Max's execution ladder.";
+    ladder.textContent = "Attach OHLCV and swing-level data to render the Technical execution ladder.";
     return;
   }
   const min = Math.min(levels.stop, levels.addLow, levels.entryLow, levels.price);
@@ -2953,7 +3001,7 @@ function renderAgentDashboards(company, opportunity, resolved) {
     document.querySelector("#max-levels-table")?.replaceChildren();
     document.querySelector("#max-price-ladder")?.replaceChildren();
     document.querySelector("#trading-decision-summary").textContent =
-      "Select a ticker to combine John and Max into one actionable view.";
+      "Select a ticker to combine Fundamental and Technical into one actionable view.";
     document.querySelector("#trading-decision-grid")?.replaceChildren();
     return;
   }
@@ -2981,7 +3029,7 @@ function renderAgentDashboards(company, opportunity, resolved) {
   const maxRows = levels
     ? [
         { label: "Preferred entry", value: formatPriceRange(levels.entryLow, levels.entryHigh), note: "Fibonacci 38.2%-61.8% proxy from the current 52-week range until swing OHLCV is attached." },
-        { label: "Add zone", value: formatPriceRange(levels.addLow, levels.addHigh), note: "Deeper retracement zone; only valid if John thesis remains intact." },
+        { label: "Add zone", value: formatPriceRange(levels.addLow, levels.addHigh), note: "Deeper retracement zone; only valid if the fundamental thesis remains intact." },
         { label: "Stop / invalidation", value: formatMoney(levels.stop), note: "Structural risk line. Later this should use ATR and detected swing invalidation." },
         { label: "Target 1", value: formatMoney(levels.target1), note: "Prior 52-week high / first trim zone." },
         { label: "Target 2", value: formatMoney(levels.target2), note: "127.2% extension proxy." },
@@ -2996,7 +3044,7 @@ function renderAgentDashboards(company, opportunity, resolved) {
   const decisionSummary = document.querySelector("#trading-decision-summary");
   if (decisionSummary) {
     decisionSummary.textContent =
-      `${company.ticker}: John says ${johnView.verdict}, Max says ${maxView.verdict}. Final Trading Decision is ${decision.finalCall} with ${decision.conviction}/100 conviction.`;
+      `${company.ticker}: Fundamental says ${johnView.verdict}, Technical says ${maxView.verdict}. Final Trading Decision is ${decision.finalCall} with ${decision.conviction}/100 conviction.`;
   }
   if (decisionGrid) {
     const tiles = [
@@ -3189,10 +3237,38 @@ function renderCompany(id) {
 function renderOpportunityTable() {
   const filteredUniverse = getFilteredUniverse();
   const searchTerm = currentFilters.search.trim().toLowerCase();
-  const opportunityCache = new Map(
-    filteredUniverse.map((company) => [company.id, getOpportunityProfile(company)]),
-  );
-  const rankedUniverse = [...filteredUniverse].sort((left, right) => {
+  const finalCallRank = { Buy: 4, Watch: 3, Wait: 2, Avoid: 1 };
+  const opportunityCache = new Map();
+  const decisionCache = new Map();
+  const tableModels = filteredUniverse.map((company) => {
+    const opportunity = getOpportunityProfile(company);
+    const resolved = opportunity.resolved;
+    const johnView = buildJohnView(company, opportunity, resolved, { includeDetails: false });
+    const maxView = buildMaxView(company, opportunity, resolved, { includeDetails: false });
+    const decision = combineTradingDecision(johnView, maxView);
+    const model = { company, opportunity, resolved, johnView, maxView, decision };
+    opportunityCache.set(company.id, opportunity);
+    decisionCache.set(company.id, model);
+    return model;
+  });
+  const rankedModels = tableModels
+    .filter((model) => currentFilters.finalCall === "all" || model.decision.finalCall === currentFilters.finalCall)
+    .sort((leftModel, rightModel) => {
+    const left = leftModel.company;
+    const right = rightModel.company;
+    if (currentFilters.finalCallSort !== "none") {
+      const direction = currentFilters.finalCallSort === "best" ? 1 : -1;
+      const callDelta =
+        (finalCallRank[rightModel.decision.finalCall] ?? 0) -
+        (finalCallRank[leftModel.decision.finalCall] ?? 0);
+      if (callDelta !== 0) {
+        return callDelta * direction;
+      }
+      const convictionDelta = rightModel.decision.conviction - leftModel.decision.conviction;
+      if (convictionDelta !== 0) {
+        return convictionDelta * direction;
+      }
+    }
     if (searchTerm) {
       const relevanceDelta =
         getSearchRelevance(right, searchTerm) - getSearchRelevance(left, searchTerm);
@@ -3210,26 +3286,28 @@ function renderOpportunityTable() {
     }
     return left.ticker.localeCompare(right.ticker);
   });
+  const rankedUniverse = rankedModels.map((model) => model.company);
 
-  const visibleUniverse = rankedUniverse.slice(0, MAX_TABLE_RESULTS);
-  const currentFilteredCompany = rankedUniverse.find((item) => item.id === currentCompanyId);
-  if (currentFilteredCompany && !visibleUniverse.some((item) => item.id === currentCompanyId)) {
-    visibleUniverse.unshift(currentFilteredCompany);
-    visibleUniverse.splice(MAX_TABLE_RESULTS);
+  const visibleModels = rankedModels.slice(0, MAX_TABLE_RESULTS);
+  const currentFilteredModel = rankedModels.find((model) => model.company.id === currentCompanyId);
+  const shouldPinCurrentCompany =
+    currentFilters.finalCallSort === "none" && currentFilters.finalCall === "all";
+  if (
+    shouldPinCurrentCompany &&
+    currentFilteredModel &&
+    !visibleModels.some((model) => model.company.id === currentCompanyId)
+  ) {
+    visibleModels.unshift(currentFilteredModel);
+    visibleModels.splice(MAX_TABLE_RESULTS);
   }
 
   companyCount.textContent =
-    filteredUniverse.length > MAX_TABLE_RESULTS
-      ? `${pluralize(filteredUniverse.length, "company", "companies")} match | showing top ${visibleUniverse.length} by setup score`
-      : `${pluralize(filteredUniverse.length, "company", "companies")} shown`;
+    rankedModels.length > MAX_TABLE_RESULTS
+      ? `${pluralize(rankedModels.length, "company", "companies")} match | showing top ${visibleModels.length} by decision score`
+      : `${pluralize(rankedModels.length, "company", "companies")} shown`;
 
   opportunityTableBody.replaceChildren(
-    ...visibleUniverse.map((company) => {
-      const opportunity = opportunityCache.get(company.id);
-      const resolved = opportunity.resolved;
-      const johnView = buildJohnView(company, opportunity, resolved);
-      const maxView = buildMaxView(company, opportunity, resolved);
-      const decision = combineTradingDecision(johnView, maxView);
+    ...visibleModels.map(({ company, johnView, maxView, decision }) => {
       const isResearchReady = isResearchReadyProfile(company);
       const row = document.createElement("tr");
       row.dataset.id = company.id;
@@ -3252,14 +3330,15 @@ function renderOpportunityTable() {
           <div class="opportunity-table__decision-summary">
             <div class="opportunity-table__decision-topline">
               <span class="opportunity-table__decision opportunity-table__decision--${decision.finalCall.toLowerCase()}">${decision.finalCall}</span>
-              <div class="opportunity-table__conviction">
-                <strong>${decision.conviction}%</strong>
-                <div class="opportunity-table__conviction-track">
-                  <i class="opportunity-table__conviction-fill" style="width:${decision.conviction}%"></i>
-                </div>
-              </div>
             </div>
-            <small>John: ${johnView.verdict} (${johnView.score}/100) | Max: ${maxView.verdict} (${maxView.score}/100)</small>
+            <small>Fundamental: ${johnView.verdict} (${johnView.score}/100) | Technical: ${maxView.verdict} (${maxView.score}/100)</small>
+          </div>
+        </td>
+        <td>
+          <div class="opportunity-table__conviction">
+            ${buildConvictionBar("Overall", decision.conviction, decision.finalCall)}
+            ${buildConvictionBar("Fundamental", johnView.score, johnView.verdict)}
+            ${buildConvictionBar("Technical", maxView.score, maxView.verdict)}
           </div>
         </td>
       `;
@@ -3268,7 +3347,7 @@ function renderOpportunityTable() {
     }),
   );
 
-  if (visibleUniverse.length === 0) {
+  if (visibleModels.length === 0) {
     renderEmptyState();
     return;
   }
@@ -3389,6 +3468,8 @@ function resetFilters() {
   currentFilters.tickerOptionSearch = "";
   currentFilters.search = "";
   currentFilters.researchReadyOnly = false;
+  currentFilters.finalCall = "all";
+  currentFilters.finalCallSort = "none";
   setTickerMenuOpen(false);
   refreshExplorer();
 }
@@ -3447,6 +3528,25 @@ researchReadyOnlyToggle.addEventListener("change", (event) => {
   currentFilters.researchReadyOnly = event.target.checked;
   refreshExplorer();
 });
+
+if (finalCallFilter) {
+  finalCallFilter.addEventListener("change", (event) => {
+    currentFilters.finalCall = event.target.value;
+    refreshExplorer();
+  });
+}
+
+if (finalCallSortButton) {
+  finalCallSortButton.addEventListener("click", () => {
+    currentFilters.finalCallSort =
+      currentFilters.finalCallSort === "none"
+        ? "best"
+        : currentFilters.finalCallSort === "best"
+          ? "worst"
+          : "none";
+    refreshExplorer();
+  });
+}
 
 clearFiltersButton.addEventListener("click", resetFilters);
 

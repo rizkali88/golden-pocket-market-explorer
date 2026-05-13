@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golden Pocket Market Explorer - Working Draft</title>
-    <link rel="stylesheet" href="./styles.css?v=20260513-combined-decision-cell" />
+    <link rel="stylesheet" href="./styles.css?v=20260513-final-call-bars" />
   </head>
   <body class="workbench-page">
     <div class="app-shell">
@@ -48,6 +48,16 @@
               <span>Research-ready only</span>
               <small>Show only tickers with active scenario predictions</small>
             </label>
+            <label class="filter-field">
+              <span>Final Call</span>
+              <select id="final-call-filter" aria-label="Final call filter">
+                <option value="all">All Calls</option>
+                <option value="Buy">Buy</option>
+                <option value="Watch">Watch</option>
+                <option value="Wait">Wait</option>
+                <option value="Avoid">Avoid</option>
+              </select>
+            </label>
             <button id="clear-filters" class="filter-button" type="button">Clear filters</button>
           </div>
         </div>
@@ -88,7 +98,7 @@
             <div class="roster-toolbar">
               <p class="roster-note" id="company-count"></p>
               <p class="roster-note roster-note--muted" id="roster-note">
-                Click any row to load John and Max's detailed dashboard for that ticker.
+                Click any row to load the Fundamental and Technical dashboard for that ticker.
               </p>
             </div>
             <div class="opportunity-table-wrap">
@@ -96,7 +106,13 @@
                 <thead>
                   <tr>
                     <th>Company / Classification</th>
-                    <th>Trading Decision</th>
+                    <th>
+                      <button class="table-sort-button" id="final-call-sort" type="button" aria-label="Sort final call">
+                        Final Call
+                        <span id="final-call-sort-state">Default</span>
+                      </button>
+                    </th>
+                    <th>Conviction</th>
                   </tr>
                 </thead>
                 <tbody id="opportunity-table-body"></tbody>
@@ -104,24 +120,24 @@
             </div>
           </section>
 
-          <section class="panel reveal agent-dashboard-panel" id="agent-dashboard-panel" data-layout-id="5.5" data-layout-label="John and Max Dashboards">
+          <section class="panel reveal agent-dashboard-panel" id="agent-dashboard-panel" data-layout-id="5.5" data-layout-label="Fundamental and Technical Dashboards">
             <div class="section-heading">
               <p class="eyebrow">Decision Dashboards</p>
-              <h2>The dashboards John and Max use before a Trading Decision</h2>
+              <h2>The Fundamental and Technical dashboards behind each Trading Decision</h2>
             </div>
 
             <div class="agent-dashboard-grid">
               <article class="agent-dashboard-card agent-dashboard-card--john">
                 <div class="agent-dashboard-card__header">
                   <div>
-                    <p class="eyebrow">John Dashboard</p>
+                    <p class="eyebrow">Fundamental Dashboard</p>
                     <h3>Fundamental Investment Memo</h3>
                   </div>
                   <span class="decision-badge" id="john-verdict">Awaiting ticker</span>
                 </div>
                 <div class="agent-input-pack">
                   <div class="agent-pack-title">
-                    <span>What John is reading</span>
+                    <span>What Fundamental is reading</span>
                     <small id="john-data-source">Ticker-level fundamentals and valuation context</small>
                   </div>
                   <div class="agent-input-grid" id="john-input-grid"></div>
@@ -145,14 +161,14 @@
               <article class="agent-dashboard-card agent-dashboard-card--max">
                 <div class="agent-dashboard-card__header">
                   <div>
-                    <p class="eyebrow">Max Dashboard</p>
+                    <p class="eyebrow">Technical Dashboard</p>
                     <h3>Technical Execution Board</h3>
                   </div>
                   <span class="decision-badge" id="max-verdict">Awaiting ticker</span>
                 </div>
                 <div class="agent-input-pack">
                   <div class="agent-pack-title">
-                    <span>What Max is reading</span>
+                    <span>What Technical is reading</span>
                     <small id="max-data-source">Price structure, trend, liquidity, and execution levels</small>
                   </div>
                   <div class="agent-input-grid" id="max-input-grid"></div>
@@ -179,7 +195,7 @@
               <div>
                 <p class="eyebrow">Combined Output</p>
                 <h3>Trading Decision</h3>
-                <p id="trading-decision-summary">Select a ticker to combine John and Max into one actionable view.</p>
+                <p id="trading-decision-summary">Select a ticker to combine Fundamental and Technical into one actionable view.</p>
               </div>
               <div class="trading-decision-grid" id="trading-decision-grid"></div>
             </article>
@@ -264,8 +280,8 @@
 
     <aside class="layout-legend" id="layout-legend" hidden aria-live="polite"></aside>
 
-    <script src="./data/market_universe.js?v=20260513-combined-decision-cell"></script>
-    <script src="./data/research_profiles.js?v=20260513-combined-decision-cell"></script>
-    <script src="./app.js?v=20260513-combined-decision-cell"></script>
+    <script src="./data/market_universe.js?v=20260513-final-call-bars"></script>
+    <script src="./data/research_profiles.js?v=20260513-final-call-bars"></script>
+    <script src="./app.js?v=20260513-final-call-bars"></script>
   </body>
 </html>
