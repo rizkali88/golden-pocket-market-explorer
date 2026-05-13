@@ -145,7 +145,17 @@
                       Max will translate the Technical dashboard into an execution map once price and 52-week range inputs are available.
                     </p>
                   </div>
-                  <span class="decision-badge" id="max-execution-verdict">Awaiting ticker</span>
+                  <div class="max-execution-panel__tools">
+                    <span class="decision-badge" id="max-execution-verdict">Awaiting ticker</span>
+                    <div class="max-execution-control-group">
+                      <span>Range</span>
+                      <div class="max-execution-range-switcher" id="max-execution-range-switcher" aria-label="Max chart range"></div>
+                    </div>
+                    <div class="max-execution-control-group">
+                      <span>Interval</span>
+                      <div class="max-execution-range-switcher" id="max-execution-interval-switcher" aria-label="Max chart interval"></div>
+                    </div>
+                  </div>
                 </div>
                 <div class="max-execution-layout">
                   <div class="max-execution-chart-shell" id="max-execution-chart-host" aria-live="polite"></div>
@@ -159,7 +169,7 @@
                   </aside>
                 </div>
                 <p class="chart-panel__note">
-                  Execution levels are generated from Max's current model using price, 52-week structure, Fibonacci-style retracement and extension proxies. Full OHLCV swing detection can replace this map later.
+                  Max overlays are generated from price, 52-week structure, and Fibonacci-style retracement and extension proxies. The chart uses cached daily market history when available, with weekly and monthly intervals derived locally; intraday intervals can be added later through a live chart/data feed.
                 </p>
               </section>
             </div>
@@ -328,7 +338,8 @@
 
     <script src="./data/market_universe.js?v=20260513-table-chart-cleanup"></script>
     <script src="./data/research_profiles.js?v=20260513-table-chart-cleanup"></script>
+    <script src="./data/history/index.js?v=20260513-max-history"></script>
     <script src="https://unpkg.com/lightweight-charts@4.2.2/dist/lightweight-charts.standalone.production.js"></script>
-    <script src="./app.js?v=20260513-max-execution-chart"></script>
+    <script src="./app.js?v=20260513-max-interval-chart"></script>
   </body>
 </html>

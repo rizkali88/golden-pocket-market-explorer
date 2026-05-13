@@ -1026,6 +1026,8 @@ const maxExecutionSummary = document.querySelector("#max-execution-summary");
 const maxExecutionScore = document.querySelector("#max-execution-score");
 const maxExecutionPosition = document.querySelector("#max-execution-position");
 const maxExecutionLevels = document.querySelector("#max-execution-levels");
+const maxExecutionRangeSwitcher = document.querySelector("#max-execution-range-switcher");
+const maxExecutionIntervalSwitcher = document.querySelector("#max-execution-interval-switcher");
 const layoutSections = [...document.querySelectorAll("[data-layout-id]")].sort(
   (left, right) => Number(left.dataset.layoutId) - Number(right.dataset.layoutId),
 );
@@ -1059,6 +1061,26 @@ let layoutModeResetTimer = null;
 let currentTradingViewKey = "";
 let currentMaxExecutionChart = null;
 let currentMaxExecutionResizeObserver = null;
+let currentMaxExecutionRangeId = "1y";
+let currentMaxExecutionIntervalId = "1d";
+let currentMaxExecutionRenderId = 0;
+const loadedHistoryChunks = new Set();
+const loadingHistoryChunks = new Map();
+
+const MAX_EXECUTION_RANGES = [
+  { id: "1m", label: "1M", days: 31 },
+  { id: "3m", label: "3M", days: 93 },
+  { id: "6m", label: "6M", days: 186 },
+  { id: "ytd", label: "YTD", ytd: true },
+  { id: "1y", label: "1Y", days: 370 },
+  { id: "all", label: "All" },
+];
+
+const MAX_EXECUTION_INTERVALS = [
+  { id: "1d", label: "1D" },
+  { id: "1w", label: "1W" },
+  { id: "1m", label: "1M" },
+];
 
 function makeButton(item, className, onClick) {
   const button = document.createElement("button");
@@ -1316,6 +1338,221 @@ function getMaxExecutionChartPalette() {
   };
 }
 
+function renderMaxExecutionRangeSwitcher() {
+  if (!maxExecutionRangeSwitcher) {
+    return;
+  }
+  maxExecutionRangeSwitcher.replaceChildren(
+    ...MAX_EXECUTION_RANGES.map((range) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "max-execution-range-button";
+      button.classList.toggle("is-active", range.id === currentMaxExecutionRangeId);
+      button.textContent = range.label;
+      button.setAttribute("aria-pressed", String(range.id === currentMaxExecutionRangeId));
+      button.addEventListener("click", () => {
+        currentMaxExecutionRangeId = range.id;
+        renderMaxExecutionRangeSwitcher();
+        renderMaxExecutionChart(companyUniverseById.get(currentCompanyId));
+      });
+      return button;
+    }),
+  );
+}
+
+function renderMaxExecutionIntervalSwitcher() {
+  if (!maxExecutionIntervalSwitcher) {
+    return;
+  }
+  maxExecutionIntervalSwitcher.replaceChildren(
+    ...MAX_EXECUTION_INTERVALS.map((interval) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "max-execution-range-button";
+      button.classList.toggle("is-active", interval.id === currentMaxExecutionIntervalId);
+      button.textContent = interval.label;
+      button.setAttribute("aria-pressed", String(interval.id === currentMaxExecutionIntervalId));
+      button.addEventListener("click", () => {
+        currentMaxExecutionIntervalId = interval.id;
+        renderMaxExecutionIntervalSwitcher();
+        renderMaxExecutionChart(companyUniverseById.get(currentCompanyId));
+      });
+      return button;
+    }),
+  );
+}
+
+function getHistoryIndexForTicker(ticker) {
+  const index = window.GOLDEN_POCKET_HISTORY_INDEX;
+  if (!index?.chunks || !ticker) {
+    return null;
+  }
+  const normalizedTicker = String(ticker).toUpperCase();
+  const chunkKey = index.chunks[normalizedTicker] ?? index.chunks[String(ticker)];
+  if (!chunkKey) {
+    return null;
+  }
+  return {
+    chunkKey,
+    fileName: index.chunkFiles?.[chunkKey] ?? `${chunkKey}.js`,
+  };
+}
+
+function loadHistoryChunk(chunkKey, fileName) {
+  if (window.GOLDEN_POCKET_HISTORY_CHUNKS?.[chunkKey] || loadedHistoryChunks.has(chunkKey)) {
+    return Promise.resolve();
+  }
+  if (loadingHistoryChunks.has(chunkKey)) {
+    return loadingHistoryChunks.get(chunkKey);
+  }
+
+  const loadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = `./data/history/${fileName}`;
+    script.async = true;
+    script.onload = () => {
+      loadedHistoryChunks.add(chunkKey);
+      loadingHistoryChunks.delete(chunkKey);
+      resolve();
+    };
+    script.onerror = () => {
+      loadingHistoryChunks.delete(chunkKey);
+      reject(new Error(`Could not load ${fileName}`));
+    };
+    document.head.append(script);
+  });
+  loadingHistoryChunks.set(chunkKey, loadPromise);
+  return loadPromise;
+}
+
+async function getCompanyPriceHistory(company) {
+  const historyLocation = getHistoryIndexForTicker(company?.ticker);
+  if (!historyLocation) {
+    return null;
+  }
+  await loadHistoryChunk(historyLocation.chunkKey, historyLocation.fileName);
+  return window.GOLDEN_POCKET_HISTORY_CHUNKS?.[historyLocation.chunkKey]?.[company.ticker] ?? null;
+}
+
+function getFilteredHistoryIndexRange(history) {
+  const times = history?.t ?? [];
+  if (times.length === 0) {
+    return { startIndex: 0, endIndex: -1 };
+  }
+  const lastTime = Number(times.at(-1));
+  const selectedRange = MAX_EXECUTION_RANGES.find((range) => range.id === currentMaxExecutionRangeId);
+  if (!selectedRange || selectedRange.id === "all") {
+    return { startIndex: 0, endIndex: times.length - 1 };
+  }
+
+  let threshold = -Infinity;
+  if (selectedRange.ytd) {
+    const lastDate = new Date(lastTime * 1000);
+    threshold = Date.UTC(lastDate.getUTCFullYear(), 0, 1) / 1000;
+  } else {
+    threshold = lastTime - selectedRange.days * 24 * 60 * 60;
+  }
+  const startIndex = times.findIndex((time) => Number(time) >= threshold);
+  return {
+    startIndex: Math.max(startIndex, 0),
+    endIndex: times.length - 1,
+  };
+}
+
+function getMaxExecutionBucketTime(time, intervalId) {
+  if (intervalId === "1d") {
+    return time;
+  }
+  const date = new Date(Number(time) * 1000);
+  if (intervalId === "1m") {
+    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1) / 1000;
+  }
+  if (intervalId === "1w") {
+    const day = date.getUTCDay();
+    const daysFromMonday = day === 0 ? 6 : day - 1;
+    const weekStart = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    weekStart.setUTCDate(weekStart.getUTCDate() - daysFromMonday);
+    return Math.floor(weekStart.getTime() / 1000);
+  }
+  return time;
+}
+
+function aggregateMaxExecutionHistoryData(historyData) {
+  if (currentMaxExecutionIntervalId === "1d" || historyData.data.length < 2) {
+    return historyData;
+  }
+
+  const buckets = new Map();
+  historyData.data.forEach((point) => {
+    const bucketTime = getMaxExecutionBucketTime(point.time, currentMaxExecutionIntervalId);
+    const existing = buckets.get(bucketTime);
+    if (historyData.type === "candles") {
+      if (!existing) {
+        buckets.set(bucketTime, {
+          time: bucketTime,
+          open: point.open,
+          high: point.high,
+          low: point.low,
+          close: point.close,
+        });
+        return;
+      }
+      existing.high = Math.max(existing.high, point.high);
+      existing.low = Math.min(existing.low, point.low);
+      existing.close = point.close;
+      return;
+    }
+
+    if (!existing) {
+      buckets.set(bucketTime, { time: bucketTime, value: point.value });
+      return;
+    }
+    existing.value = point.value;
+  });
+
+  return {
+    type: historyData.type,
+    data: [...buckets.values()].sort((left, right) => left.time - right.time),
+  };
+}
+
+function getMaxExecutionHistoryData(history) {
+  const { startIndex, endIndex } = getFilteredHistoryIndexRange(history);
+  if (endIndex < startIndex) {
+    return { type: "line", data: [] };
+  }
+  const hasCandles =
+    Array.isArray(history.o) &&
+    Array.isArray(history.h) &&
+    Array.isArray(history.l) &&
+    history.o.length === history.t.length &&
+    history.h.length === history.t.length &&
+    history.l.length === history.t.length;
+
+  const data = [];
+  for (let index = startIndex; index <= endIndex; index += 1) {
+    const time = Number(history.t[index]);
+    const close = Number(history.c[index]);
+    if (!Number.isFinite(time) || !Number.isFinite(close)) {
+      continue;
+    }
+    if (hasCandles) {
+      const open = Number(history.o[index]);
+      const high = Number(history.h[index]);
+      const low = Number(history.l[index]);
+      if ([open, high, low].every(Number.isFinite)) {
+        data.push({ time, open, high, low, close });
+      }
+    } else {
+      data.push({ time, value: close });
+    }
+  }
+  return aggregateMaxExecutionHistoryData({
+    type: hasCandles ? "candles" : "line",
+    data,
+  });
+}
+
 function buildExecutionCandles(company, levels) {
   const count = 78;
   const range = Math.max(levels.high - levels.low, levels.price * 0.08);
@@ -1422,22 +1659,25 @@ function makeMaxExecutionLevelCard(label, value, note, tone) {
   return card;
 }
 
-function renderMaxExecutionChart(company, opportunity = null, resolved = null) {
+async function renderMaxExecutionChart(company, opportunity = null, resolved = null) {
   if (!maxExecutionChartHost || !company) {
     return;
   }
 
+  const renderId = (currentMaxExecutionRenderId += 1);
   const profile = opportunity ?? getOpportunityProfile(company);
   const targetContext = resolved ?? profile.resolved;
   const maxView = buildMaxView(company, profile, targetContext, { includeDetails: false });
   const levels = maxView.levels;
+  renderMaxExecutionRangeSwitcher();
+  renderMaxExecutionIntervalSwitcher();
 
   if (maxExecutionTitle) {
     maxExecutionTitle.textContent = `${company.ticker} Max execution map`;
   }
   if (maxExecutionSummary) {
     maxExecutionSummary.textContent = levels
-      ? `Technical call is ${maxView.verdict} with ${maxView.score}/100 conviction. Max wants entry near ${formatPriceRange(levels.entryLow, levels.entryHigh)}, stop at ${formatMoney(levels.stop)}, and staged profit-taking into ${formatMoney(levels.target1)}, ${formatMoney(levels.target2)}, then ${formatMoney(levels.target3)}.`
+      ? `Technical call is ${maxView.verdict} with ${maxView.score}/100 conviction. Max overlays real cached daily history with entry near ${formatPriceRange(levels.entryLow, levels.entryHigh)}, stop at ${formatMoney(levels.stop)}, and staged profit-taking into ${formatMoney(levels.target1)}, ${formatMoney(levels.target2)}, then ${formatMoney(levels.target3)}.`
       : `${company.ticker} is not research-ready enough for Max to draw entry, stop, and take-profit levels yet.`;
   }
   if (maxExecutionScore) {
@@ -1460,7 +1700,7 @@ function renderMaxExecutionChart(company, opportunity = null, resolved = null) {
 
   if (!levels) {
     maxExecutionChartHost.replaceChildren(
-      makeMaxExecutionPlaceholder("Attach price, 52-week high/low, and OHLCV history to unlock Max's chart."),
+      makeMaxExecutionPlaceholder("Attach price, 52-week high/low, and daily market history to unlock Max's chart."),
     );
     return;
   }
@@ -1468,6 +1708,31 @@ function renderMaxExecutionChart(company, opportunity = null, resolved = null) {
   if (!window.LightweightCharts) {
     maxExecutionChartHost.replaceChildren(
       makeMaxExecutionPlaceholder("The chart library did not load. Level cards are still available on the right."),
+    );
+    return;
+  }
+
+  maxExecutionChartHost.replaceChildren(makeMaxExecutionPlaceholder("Loading cached daily history for the selected ticker."));
+  let history = null;
+  try {
+    history = await getCompanyPriceHistory(company);
+  } catch (error) {
+    history = null;
+  }
+  if (renderId !== currentMaxExecutionRenderId) {
+    return;
+  }
+  if (!history) {
+    maxExecutionChartHost.replaceChildren(
+      makeMaxExecutionPlaceholder("No cached daily history chunk is available for this ticker yet. Re-run the market refresh to publish it."),
+    );
+    return;
+  }
+
+  const historyData = getMaxExecutionHistoryData(history);
+  if (historyData.data.length < 2) {
+    maxExecutionChartHost.replaceChildren(
+      makeMaxExecutionPlaceholder("This selected range does not have enough historical points. Try 1Y or All."),
     );
     return;
   }
@@ -1499,16 +1764,23 @@ function renderMaxExecutionChart(company, opportunity = null, resolved = null) {
       mode: window.LightweightCharts.CrosshairMode.Normal,
     },
   });
-  const candleSeries = chart.addCandlestickSeries({
-    upColor: palette.up,
-    downColor: palette.down,
-    borderUpColor: palette.up,
-    borderDownColor: palette.down,
-    wickUpColor: palette.wickUp,
-    wickDownColor: palette.wickDown,
-  });
-  const candles = buildExecutionCandles(company, levels);
-  candleSeries.setData(candles);
+  const priceSeries =
+    historyData.type === "candles"
+      ? chart.addCandlestickSeries({
+          upColor: palette.up,
+          downColor: palette.down,
+          borderUpColor: palette.up,
+          borderDownColor: palette.down,
+          wickUpColor: palette.wickUp,
+          wickDownColor: palette.wickDown,
+        })
+      : chart.addAreaSeries({
+          lineColor: palette.up,
+          topColor: "rgba(99, 210, 200, 0.28)",
+          bottomColor: "rgba(99, 210, 200, 0.02)",
+          lineWidth: 2,
+        });
+  priceSeries.setData(historyData.data);
 
   const dashed = window.LightweightCharts.LineStyle.Dashed;
   const dotted = window.LightweightCharts.LineStyle.Dotted;
@@ -1522,7 +1794,7 @@ function renderMaxExecutionChart(company, opportunity = null, resolved = null) {
     ["TP2", levels.target2, palette.target, dashed],
     ["TP3", levels.target3, palette.target, dotted],
   ].forEach(([title, price, color, lineStyle]) => {
-    candleSeries.createPriceLine({
+    priceSeries.createPriceLine({
       price,
       color,
       lineWidth: title === "Current" ? 2 : 1,
@@ -1532,9 +1804,9 @@ function renderMaxExecutionChart(company, opportunity = null, resolved = null) {
     });
   });
 
-  const lastTime = candles.at(-1)?.time;
+  const lastTime = historyData.data.at(-1)?.time;
   if (lastTime) {
-    candleSeries.setMarkers([
+    priceSeries.setMarkers([
       {
         time: lastTime,
         position: "inBar",

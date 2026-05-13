@@ -180,9 +180,14 @@ def load_cached_price_payload(
     if force_refresh or not cache_is_fresh(cache_path, cache_hours):
         return None
     try:
-        return json.loads(cache_path.read_text(encoding="utf-8"))
+        payload = json.loads(cache_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
+    if payload.get("close") and not all(
+        isinstance(payload.get(field), list) for field in ("open", "high", "low", "volume")
+    ):
+        return None
+    return payload
 
 
 def write_cache(cache_path: Path, payload: dict[str, Any]) -> None:
@@ -214,7 +219,7 @@ def fetch_spark_batch(
     url = (
         f"{YAHOO_SPARK_URL}?symbols="
         f"{urllib.parse.quote(symbols, safe=',.-^=')}"
-        "&range=1y&interval=1d&indicators=close&includeTimestamps=true"
+        "&range=1y&interval=1d&indicators=quote&includeTimestamps=true"
     )
     request = Request(url, headers={"User-Agent": user_agent})
     with urlopen(request, timeout=timeout) as response:
@@ -227,15 +232,15 @@ def fetch_spark_batch(
         if not symbol or not response_rows:
             continue
         first = response_rows[0]
-        close_series = (
-            first.get("indicators", {})
-            .get("quote", [{}])[0]
-            .get("close", [])
-        )
+        quote = first.get("indicators", {}).get("quote", [{}])[0]
         results[symbol] = {
             "meta": first.get("meta", {}),
             "timestamp": first.get("timestamp") or [],
-            "close": close_series,
+            "open": quote.get("open", []),
+            "high": quote.get("high", []),
+            "low": quote.get("low", []),
+            "close": quote.get("close", []),
+            "volume": quote.get("volume", []),
         }
     return results
 
@@ -1010,6 +1015,140 @@ def write_outputs(payload: dict[str, Any], output_dir: Path) -> tuple[Path, Path
     return json_path, js_path
 
 
+def history_chunk_key(ticker: str) -> str:
+    first = (ticker or "_")[0].lower()
+    if first.isalpha():
+        return first
+    if first.isdigit():
+        return f"n{first}"
+    return "other"
+
+
+def rounded_history_value(value: Any, digits: int = 4) -> float | None:
+    if not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+        return None
+    return round(float(value), digits)
+
+
+def build_compact_price_history(market_payload: dict[str, Any]) -> dict[str, Any] | None:
+    timestamps = market_payload.get("timestamp") or []
+    closes = market_payload.get("close") or []
+    opens = market_payload.get("open") or []
+    highs = market_payload.get("high") or []
+    lows = market_payload.get("low") or []
+    volumes = market_payload.get("volume") or []
+    meta = market_payload.get("meta") or {}
+
+    times: list[int] = []
+    close_values: list[float] = []
+    open_values: list[float] = []
+    high_values: list[float] = []
+    low_values: list[float] = []
+    volume_values: list[int] = []
+    has_ohlc = bool(opens and highs and lows)
+    has_volume = bool(volumes)
+
+    for index, timestamp in enumerate(timestamps):
+        if not isinstance(timestamp, (int, float)):
+            continue
+        if index >= len(closes):
+            continue
+        close = rounded_history_value(closes[index])
+        if close is None:
+            continue
+
+        times.append(int(timestamp))
+        close_values.append(close)
+
+        if has_ohlc:
+            open_value = rounded_history_value(opens[index] if index < len(opens) else None)
+            high_value = rounded_history_value(highs[index] if index < len(highs) else None)
+            low_value = rounded_history_value(lows[index] if index < len(lows) else None)
+            if open_value is None or high_value is None or low_value is None:
+                has_ohlc = False
+            else:
+                open_values.append(open_value)
+                high_values.append(high_value)
+                low_values.append(low_value)
+
+        if has_volume:
+            volume = volumes[index] if index < len(volumes) else None
+            if not isinstance(volume, (int, float)) or not math.isfinite(float(volume)):
+                has_volume = False
+            else:
+                volume_values.append(int(volume))
+
+    if len(times) < 2:
+        return None
+
+    compact = {
+        "t": times,
+        "c": close_values,
+        "r": meta.get("range") or "1y",
+        "g": meta.get("dataGranularity") or "1d",
+    }
+    if has_ohlc and len(open_values) == len(times):
+        compact.update({"o": open_values, "h": high_values, "l": low_values})
+    if has_volume and len(volume_values) == len(times):
+        compact["v"] = volume_values
+    return compact
+
+
+def write_price_history_outputs(
+    market_payloads: dict[str, dict[str, Any]],
+    research_tickers: Iterable[str],
+    output_dir: Path,
+    *,
+    generated_at: str,
+) -> tuple[Path, list[Path]]:
+    history_dir = output_dir / "history"
+    history_dir.mkdir(parents=True, exist_ok=True)
+    for old_file in history_dir.glob("*.js"):
+        old_file.unlink()
+
+    chunks: dict[str, dict[str, Any]] = {}
+    ticker_to_chunk: dict[str, str] = {}
+    for ticker in sorted(set(research_tickers)):
+        history = build_compact_price_history(market_payloads.get(ticker) or {})
+        if not history:
+            continue
+        chunk_key = history_chunk_key(ticker)
+        chunks.setdefault(chunk_key, {})[ticker] = history
+        ticker_to_chunk[ticker] = chunk_key
+
+    chunk_files: dict[str, str] = {}
+    written_chunks: list[Path] = []
+    for chunk_key, chunk_payload in sorted(chunks.items()):
+        file_name = f"{chunk_key}.js"
+        chunk_files[chunk_key] = file_name
+        chunk_path = history_dir / file_name
+        serialized_chunk = json.dumps(chunk_payload, separators=(",", ":"))
+        chunk_path.write_text(
+            "window.GOLDEN_POCKET_HISTORY_CHUNKS = window.GOLDEN_POCKET_HISTORY_CHUNKS || {};\n"
+            f"window.GOLDEN_POCKET_HISTORY_CHUNKS[{json.dumps(chunk_key)}] = {serialized_chunk};\n",
+            encoding="utf-8",
+        )
+        written_chunks.append(chunk_path)
+
+    index_payload = {
+        "generatedAt": generated_at,
+        "source": {
+            "marketHistory": YAHOO_SPARK_URL,
+            "range": "1y",
+            "interval": "1d",
+            "note": "Static daily price-history chunks are generated server-side so the webapp can load selected ticker charts without exposing API keys.",
+        },
+        "chunks": ticker_to_chunk,
+        "chunkFiles": chunk_files,
+    }
+    index_path = history_dir / "index.js"
+    index_path.write_text(
+        f"window.GOLDEN_POCKET_HISTORY_INDEX = {json.dumps(index_payload, separators=(',', ':'))};\n",
+        encoding="utf-8",
+    )
+    return index_path, written_chunks
+
+
 def build_research_profiles(
     *,
     universe_path: Path,
@@ -1071,6 +1210,7 @@ def build_research_profiles(
             "profiles": [],
         }
         write_outputs(payload, output_dir)
+        write_price_history_outputs({}, [], output_dir, generated_at=generated_at)
         return payload
 
     sector_context, global_context = compute_sector_context(metrics)
@@ -1124,12 +1264,22 @@ def build_research_profiles(
         "profiles": sorted(profiles, key=lambda item: item["ticker"]),
     }
     json_path, js_path = write_outputs(payload, output_dir)
+    history_index_path, history_chunk_paths = write_price_history_outputs(
+        market_payloads,
+        (profile["ticker"] for profile in profiles),
+        output_dir,
+        generated_at=generated_at,
+    )
     print(
         f"Generated {stats['researchReadyTickers']} research-ready profiles "
         f"out of {stats['requestedTickers']} requested tickers."
     )
     print(f"JSON output: {json_path}")
     print(f"JS output:   {js_path}")
+    print(
+        f"History output: {history_index_path} "
+        f"({len(history_chunk_paths)} lazy-loaded chunk files)"
+    )
     return payload
 
 
