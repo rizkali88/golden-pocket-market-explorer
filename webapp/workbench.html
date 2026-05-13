@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golden Pocket Market Explorer - Working Draft</title>
-    <link rel="stylesheet" href="./styles.css?v=20260513-toolbar-layout" />
+    <link rel="stylesheet" href="./styles.css?v=20260513-toolbar-toggle-cleanup" />
   </head>
   <body class="workbench-page">
     <div class="app-shell">
@@ -45,11 +45,6 @@
               </div>
               <select id="ticker-filter" aria-label="Ticker selector" hidden></select>
             </div>
-            <label class="filter-switch" for="research-ready-only">
-              <input id="research-ready-only" type="checkbox" />
-              <span>Research-ready only</span>
-              <small>Show only tickers with active scenario predictions</small>
-            </label>
             <label class="filter-field">
               <span>Final Call</span>
               <select id="final-call-filter" aria-label="Final call filter">

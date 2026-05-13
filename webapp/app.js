@@ -3897,7 +3897,9 @@ function syncFiltersUI(filteredUniverse = getFilteredUniverse()) {
   if (tickerFilterSearch) {
     tickerFilterSearch.value = currentFilters.tickerOptionSearch;
   }
-  researchReadyOnlyToggle.checked = currentFilters.researchReadyOnly;
+  if (researchReadyOnlyToggle) {
+    researchReadyOnlyToggle.checked = currentFilters.researchReadyOnly;
+  }
   if (finalCallFilter) {
     finalCallFilter.value = currentFilters.finalCall;
   }
@@ -6165,10 +6167,12 @@ if (tickerSearch) {
   });
 }
 
-researchReadyOnlyToggle.addEventListener("change", (event) => {
-  currentFilters.researchReadyOnly = event.target.checked;
-  refreshExplorer();
-});
+if (researchReadyOnlyToggle) {
+  researchReadyOnlyToggle.addEventListener("change", (event) => {
+    currentFilters.researchReadyOnly = event.target.checked;
+    refreshExplorer();
+  });
+}
 
 if (finalCallFilter) {
   finalCallFilter.addEventListener("change", (event) => {
