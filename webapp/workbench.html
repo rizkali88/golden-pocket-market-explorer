@@ -147,6 +147,15 @@
                   </div>
                   <div class="max-execution-panel__tools">
                     <span class="decision-badge" id="max-execution-verdict">Awaiting ticker</span>
+                    <div class="max-live-strip">
+                      <span class="max-live-status" id="max-live-status">Live off</span>
+                      <button class="max-live-action" id="max-live-toggle" type="button">Live feed</button>
+                      <button class="max-live-action" id="max-live-connect" type="button">FMP key</button>
+                    </div>
+                    <div class="max-execution-control-group">
+                      <span>Chart</span>
+                      <div class="max-execution-range-switcher" id="max-execution-chart-type-switcher" aria-label="Max chart type"></div>
+                    </div>
                     <div class="max-execution-control-group">
                       <span>Range</span>
                       <div class="max-execution-range-switcher" id="max-execution-range-switcher" aria-label="Max chart range"></div>
@@ -169,7 +178,7 @@
                   </aside>
                 </div>
                 <p class="chart-panel__note">
-                  Max overlays are generated from price, 52-week structure, and Fibonacci-style retracement and extension proxies. The chart uses cached daily market history when available, with weekly and monthly intervals derived locally; intraday intervals can be added later through a live chart/data feed.
+                  Max overlays are generated from price, 52-week structure, and Fibonacci-style retracement and extension proxies. Daily, weekly, and monthly views can use cached history; 1m, 15m, and 4h views use FMP live/intraday data when connected.
                 </p>
               </section>
             </div>
@@ -339,7 +348,8 @@
     <script src="./data/market_universe.js?v=20260513-table-chart-cleanup"></script>
     <script src="./data/research_profiles.js?v=20260513-table-chart-cleanup"></script>
     <script src="./data/history/index.js?v=20260513-max-history"></script>
+    <script src="./data/live_config.js?v=20260513-fmp-live"></script>
     <script src="https://unpkg.com/lightweight-charts@4.2.2/dist/lightweight-charts.standalone.production.js"></script>
-    <script src="./app.js?v=20260513-max-interval-chart"></script>
+    <script src="./app.js?v=20260513-fmp-live-chart"></script>
   </body>
 </html>

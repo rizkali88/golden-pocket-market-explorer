@@ -1026,6 +1026,10 @@ const maxExecutionSummary = document.querySelector("#max-execution-summary");
 const maxExecutionScore = document.querySelector("#max-execution-score");
 const maxExecutionPosition = document.querySelector("#max-execution-position");
 const maxExecutionLevels = document.querySelector("#max-execution-levels");
+const maxLiveStatus = document.querySelector("#max-live-status");
+const maxLiveToggle = document.querySelector("#max-live-toggle");
+const maxLiveConnect = document.querySelector("#max-live-connect");
+const maxExecutionChartTypeSwitcher = document.querySelector("#max-execution-chart-type-switcher");
 const maxExecutionRangeSwitcher = document.querySelector("#max-execution-range-switcher");
 const maxExecutionIntervalSwitcher = document.querySelector("#max-execution-interval-switcher");
 const layoutSections = [...document.querySelectorAll("[data-layout-id]")].sort(
@@ -1063,11 +1067,31 @@ let currentMaxExecutionChart = null;
 let currentMaxExecutionResizeObserver = null;
 let currentMaxExecutionRangeId = "1y";
 let currentMaxExecutionIntervalId = "1d";
+let currentMaxExecutionChartTypeId =
+  window.localStorage.getItem("golden-pocket-max-chart-type") || "line";
 let currentMaxExecutionRenderId = 0;
 const loadedHistoryChunks = new Set();
 const loadingHistoryChunks = new Map();
+const fmpHistoryCache = new Map();
+const fmpQuoteCache = new Map();
+let maxExecutionLiveTimer = null;
+
+const maxExecutionLiveConfig = {
+  provider: "fmp",
+  proxyBaseUrl: "",
+  pollSeconds: 20,
+  allowBrowserApiKey: true,
+  ...(window.GOLDEN_POCKET_LIVE_CONFIG ?? {}),
+};
+const FMP_DIRECT_BASE_URL = "https://financialmodelingprep.com/stable";
+const FMP_LOCAL_KEY_STORAGE_KEY = "golden-pocket-fmp-api-key";
+const FMP_LIVE_ENABLED_STORAGE_KEY = "golden-pocket-fmp-live-enabled";
+let maxExecutionLiveEnabled =
+  window.localStorage.getItem(FMP_LIVE_ENABLED_STORAGE_KEY) === "on";
 
 const MAX_EXECUTION_RANGES = [
+  { id: "1d", label: "1D", days: 1 },
+  { id: "5d", label: "5D", days: 5 },
   { id: "1m", label: "1M", days: 31 },
   { id: "3m", label: "3M", days: 93 },
   { id: "6m", label: "6M", days: 186 },
@@ -1076,10 +1100,18 @@ const MAX_EXECUTION_RANGES = [
   { id: "all", label: "All" },
 ];
 
+const MAX_EXECUTION_CHART_TYPES = [
+  { id: "line", label: "Line" },
+  { id: "candles", label: "Candles" },
+];
+
 const MAX_EXECUTION_INTERVALS = [
+  { id: "1min", label: "1m", fmpInterval: "1min", maxDays: 5 },
+  { id: "15min", label: "15m", fmpInterval: "15min", maxDays: 45 },
+  { id: "4hour", label: "4H", fmpInterval: "4hour", maxDays: 370 },
   { id: "1d", label: "1D" },
-  { id: "1w", label: "1W" },
-  { id: "1m", label: "1M" },
+  { id: "1w", label: "1W", aggregateInterval: "1w" },
+  { id: "1mo", label: "1M", aggregateInterval: "1mo" },
 ];
 
 function makeButton(item, className, onClick) {
@@ -1360,6 +1392,32 @@ function renderMaxExecutionRangeSwitcher() {
   );
 }
 
+function renderMaxExecutionChartTypeSwitcher() {
+  if (!maxExecutionChartTypeSwitcher) {
+    return;
+  }
+  if (!MAX_EXECUTION_CHART_TYPES.some((type) => type.id === currentMaxExecutionChartTypeId)) {
+    currentMaxExecutionChartTypeId = "line";
+  }
+  maxExecutionChartTypeSwitcher.replaceChildren(
+    ...MAX_EXECUTION_CHART_TYPES.map((type) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "max-execution-range-button";
+      button.classList.toggle("is-active", type.id === currentMaxExecutionChartTypeId);
+      button.textContent = type.label;
+      button.setAttribute("aria-pressed", String(type.id === currentMaxExecutionChartTypeId));
+      button.addEventListener("click", () => {
+        currentMaxExecutionChartTypeId = type.id;
+        window.localStorage.setItem("golden-pocket-max-chart-type", type.id);
+        renderMaxExecutionChartTypeSwitcher();
+        renderMaxExecutionChart(companyUniverseById.get(currentCompanyId));
+      });
+      return button;
+    }),
+  );
+}
+
 function renderMaxExecutionIntervalSwitcher() {
   if (!maxExecutionIntervalSwitcher) {
     return;
@@ -1434,13 +1492,364 @@ async function getCompanyPriceHistory(company) {
   return window.GOLDEN_POCKET_HISTORY_CHUNKS?.[historyLocation.chunkKey]?.[company.ticker] ?? null;
 }
 
+function getSelectedMaxExecutionInterval() {
+  return (
+    MAX_EXECUTION_INTERVALS.find((interval) => interval.id === currentMaxExecutionIntervalId) ??
+    MAX_EXECUTION_INTERVALS.find((interval) => interval.id === "1d")
+  );
+}
+
+function getSelectedMaxExecutionRange() {
+  return (
+    MAX_EXECUTION_RANGES.find((range) => range.id === currentMaxExecutionRangeId) ??
+    MAX_EXECUTION_RANGES.find((range) => range.id === "1y")
+  );
+}
+
+function getFmpProxyBaseUrl() {
+  return String(maxExecutionLiveConfig.proxyBaseUrl || "").replace(/\/+$/, "");
+}
+
+function getLocalFmpApiKey() {
+  if (!maxExecutionLiveConfig.allowBrowserApiKey) {
+    return "";
+  }
+  return window.localStorage.getItem(FMP_LOCAL_KEY_STORAGE_KEY) || "";
+}
+
+function hasFmpLiveSource() {
+  return Boolean(getFmpProxyBaseUrl() || getLocalFmpApiKey());
+}
+
+function getLivePollSeconds() {
+  return clampNumber(Number(maxExecutionLiveConfig.pollSeconds) || 20, 5, 300);
+}
+
+function setMaxLiveEnabled(enabled) {
+  maxExecutionLiveEnabled = enabled;
+  window.localStorage.setItem(FMP_LIVE_ENABLED_STORAGE_KEY, enabled ? "on" : "off");
+  renderMaxLiveStatus();
+}
+
+function renderMaxLiveStatus(status = {}) {
+  if (!maxLiveStatus) {
+    return;
+  }
+  const hasSource = hasFmpLiveSource();
+  let state = "off";
+  let text = "Live off";
+  if (status.error) {
+    state = "error";
+    text = "Live error";
+  } else if (maxExecutionLiveEnabled && !hasSource) {
+    state = "missing";
+    text = "FMP key needed";
+  } else if (maxExecutionLiveEnabled && hasSource) {
+    state = "on";
+    text = status.text || "FMP live";
+  }
+  maxLiveStatus.dataset.state = state;
+  maxLiveStatus.textContent = text;
+  if (maxLiveToggle) {
+    maxLiveToggle.classList.toggle("is-active", maxExecutionLiveEnabled);
+    maxLiveToggle.textContent = maxExecutionLiveEnabled ? "Live on" : "Live feed";
+  }
+}
+
+function connectLocalFmpKey() {
+  if (!maxExecutionLiveConfig.allowBrowserApiKey) {
+    window.alert("Browser API-key storage is disabled. Add a secure FMP proxy URL in live_config.js instead.");
+    return;
+  }
+  const currentKey = getLocalFmpApiKey();
+  const enteredKey = window.prompt(
+    "Paste your FMP API key for this browser only. Leave blank and press OK to remove the saved local key.",
+    currentKey ? "saved" : "",
+  );
+  if (enteredKey === null) {
+    return;
+  }
+  const normalizedKey = enteredKey.trim();
+  if (!normalizedKey) {
+    window.localStorage.removeItem(FMP_LOCAL_KEY_STORAGE_KEY);
+    fmpHistoryCache.clear();
+    fmpQuoteCache.clear();
+    renderMaxLiveStatus();
+    renderMaxExecutionChart(companyUniverseById.get(currentCompanyId));
+    return;
+  }
+  if (normalizedKey !== "saved") {
+    window.localStorage.setItem(FMP_LOCAL_KEY_STORAGE_KEY, normalizedKey);
+  }
+  setMaxLiveEnabled(true);
+  fmpHistoryCache.clear();
+  fmpQuoteCache.clear();
+  renderMaxExecutionChart(companyUniverseById.get(currentCompanyId));
+}
+
+function buildFmpRequestUrl(kind, params = {}) {
+  const proxyBaseUrl = getFmpProxyBaseUrl();
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value != null && value !== "") {
+      searchParams.set(key, value);
+    }
+  });
+
+  if (proxyBaseUrl) {
+    return `${proxyBaseUrl}/${kind}?${searchParams.toString()}`;
+  }
+
+  const localKey = getLocalFmpApiKey();
+  if (!localKey) {
+    return null;
+  }
+  searchParams.set("apikey", localKey);
+  if (kind === "quote") {
+    return `${FMP_DIRECT_BASE_URL}/quote-short?${searchParams.toString()}`;
+  }
+  const interval = searchParams.get("interval");
+  searchParams.delete("interval");
+  return `${FMP_DIRECT_BASE_URL}/historical-chart/${interval}?${searchParams.toString()}`;
+}
+
+async function fetchJson(url, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return await response.json();
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+function normalizeFmpRows(payload) {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+  if (Array.isArray(payload?.historical)) {
+    return payload.historical;
+  }
+  return [];
+}
+
+function getFmpTimestamp(value) {
+  if (!value) {
+    return null;
+  }
+  const text = String(value).trim();
+  const parsed = Date.parse(text.includes("T") ? text : `${text.replace(" ", "T")}Z`);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  return Math.floor(parsed / 1000);
+}
+
+function parseFmpHistory(payload) {
+  const rows = normalizeFmpRows(payload);
+  const parsedRows = rows
+    .map((row) => {
+      const time = getFmpTimestamp(row.date);
+      const open = Number(row.open);
+      const high = Number(row.high);
+      const low = Number(row.low);
+      const close = Number(row.close);
+      if (![time, open, high, low, close].every(Number.isFinite)) {
+        return null;
+      }
+      return {
+        time,
+        open,
+        high,
+        low,
+        close,
+        volume: Number(row.volume),
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.time - right.time);
+
+  if (parsedRows.length < 2) {
+    return null;
+  }
+
+  return {
+    t: parsedRows.map((row) => row.time),
+    o: parsedRows.map((row) => row.open),
+    h: parsedRows.map((row) => row.high),
+    l: parsedRows.map((row) => row.low),
+    c: parsedRows.map((row) => row.close),
+    v: parsedRows.map((row) => (Number.isFinite(row.volume) ? row.volume : 0)),
+    source: "fmp",
+  };
+}
+
+function getIsoDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function getRangeDaysForFmp(intervalMeta, rangeMeta) {
+  if (rangeMeta?.ytd) {
+    const now = new Date();
+    const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+    const days = Math.ceil((Date.now() - yearStart.getTime()) / 86400000);
+    return Math.min(days, intervalMeta.maxDays ?? days);
+  }
+  if (!rangeMeta || rangeMeta.id === "all") {
+    return intervalMeta.maxDays ?? 370;
+  }
+  return Math.min(rangeMeta.days ?? 370, intervalMeta.maxDays ?? rangeMeta.days ?? 370);
+}
+
+function getFmpHistoryWindow(intervalMeta, rangeMeta) {
+  const to = new Date();
+  const from = new Date(to);
+  from.setUTCDate(to.getUTCDate() - getRangeDaysForFmp(intervalMeta, rangeMeta));
+  return {
+    from: getIsoDate(from),
+    to: getIsoDate(to),
+  };
+}
+
+async function fetchFmpIntradayHistory(company, intervalMeta, rangeMeta) {
+  if (!company?.ticker || !intervalMeta?.fmpInterval || !hasFmpLiveSource()) {
+    return null;
+  }
+  const { from, to } = getFmpHistoryWindow(intervalMeta, rangeMeta);
+  const cacheKey = `${company.ticker}:${intervalMeta.fmpInterval}:${from}:${to}`;
+  const cached = fmpHistoryCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < getLivePollSeconds() * 1000) {
+    return cached.history;
+  }
+
+  const url = buildFmpRequestUrl("history", {
+    symbol: company.ticker,
+    interval: intervalMeta.fmpInterval,
+    from,
+    to,
+  });
+  if (!url) {
+    return null;
+  }
+  const payload = await fetchJson(url);
+  const history = parseFmpHistory(payload);
+  if (history) {
+    fmpHistoryCache.set(cacheKey, { history, fetchedAt: Date.now() });
+  }
+  return history;
+}
+
+function parseFmpQuote(payload) {
+  const row = normalizeFmpRows(payload)[0] ?? payload;
+  const price = Number(row?.price ?? row?.bidPrice ?? row?.askPrice);
+  if (!Number.isFinite(price)) {
+    return null;
+  }
+  return {
+    price,
+    volume: Number(row.volume),
+    fetchedAt: Date.now(),
+  };
+}
+
+async function fetchFmpQuote(company) {
+  if (!company?.ticker || !hasFmpLiveSource()) {
+    return null;
+  }
+  const cacheKey = company.ticker;
+  const cached = fmpQuoteCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < getLivePollSeconds() * 1000) {
+    return cached;
+  }
+  const url = buildFmpRequestUrl("quote", { symbol: company.ticker });
+  if (!url) {
+    return null;
+  }
+  const quote = parseFmpQuote(await fetchJson(url, 10000));
+  if (quote) {
+    fmpQuoteCache.set(cacheKey, quote);
+  }
+  return quote;
+}
+
+function mergeLiveQuoteIntoHistory(history, liveQuote) {
+  if (!history || !liveQuote?.price) {
+    return history;
+  }
+
+  const result = {
+    ...history,
+    t: [...(history.t ?? [])],
+    c: [...(history.c ?? [])],
+    o: Array.isArray(history.o) ? [...history.o] : undefined,
+    h: Array.isArray(history.h) ? [...history.h] : undefined,
+    l: Array.isArray(history.l) ? [...history.l] : undefined,
+    v: Array.isArray(history.v) ? [...history.v] : undefined,
+  };
+  const latestTime = Math.floor(liveQuote.fetchedAt / 1000);
+  const lastIndex = result.t.length - 1;
+  if (lastIndex < 0) {
+    return history;
+  }
+  const lastTime = Number(result.t[lastIndex]);
+  const sameDailyBar =
+    currentMaxExecutionIntervalId === "1d" &&
+    new Date(lastTime * 1000).toISOString().slice(0, 10) === new Date(liveQuote.fetchedAt).toISOString().slice(0, 10);
+
+  if (sameDailyBar || latestTime - lastTime < 60 * 60 * 6) {
+    result.c[lastIndex] = liveQuote.price;
+    if (result.h?.length === result.t.length) {
+      result.h[lastIndex] = Math.max(Number(result.h[lastIndex]), liveQuote.price);
+    }
+    if (result.l?.length === result.t.length) {
+      result.l[lastIndex] = Math.min(Number(result.l[lastIndex]), liveQuote.price);
+    }
+  } else {
+    result.t.push(latestTime);
+    result.c.push(liveQuote.price);
+    if (result.o?.length === lastIndex + 1 && result.h?.length === lastIndex + 1 && result.l?.length === lastIndex + 1) {
+      result.o.push(liveQuote.price);
+      result.h.push(liveQuote.price);
+      result.l.push(liveQuote.price);
+    }
+    if (result.v?.length === lastIndex + 1) {
+      result.v.push(Number.isFinite(liveQuote.volume) ? liveQuote.volume : 0);
+    }
+  }
+  return result;
+}
+
+function scheduleMaxLiveRefresh(company) {
+  if (maxExecutionLiveTimer) {
+    window.clearInterval(maxExecutionLiveTimer);
+    maxExecutionLiveTimer = null;
+  }
+  if (!maxExecutionLiveEnabled || !hasFmpLiveSource() || !company) {
+    return;
+  }
+  maxExecutionLiveTimer = window.setInterval(() => {
+    fmpQuoteCache.delete(company.ticker);
+    if (getSelectedMaxExecutionInterval()?.fmpInterval) {
+      fmpHistoryCache.clear();
+    }
+    renderMaxExecutionChart(companyUniverseById.get(currentCompanyId));
+  }, getLivePollSeconds() * 1000);
+}
+
 function getFilteredHistoryIndexRange(history) {
   const times = history?.t ?? [];
   if (times.length === 0) {
     return { startIndex: 0, endIndex: -1 };
   }
   const lastTime = Number(times.at(-1));
-  const selectedRange = MAX_EXECUTION_RANGES.find((range) => range.id === currentMaxExecutionRangeId);
+  const selectedRange = getSelectedMaxExecutionRange();
   if (!selectedRange || selectedRange.id === "all") {
     return { startIndex: 0, endIndex: times.length - 1 };
   }
@@ -1464,7 +1873,7 @@ function getMaxExecutionBucketTime(time, intervalId) {
     return time;
   }
   const date = new Date(Number(time) * 1000);
-  if (intervalId === "1m") {
+  if (intervalId === "1mo") {
     return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1) / 1000;
   }
   if (intervalId === "1w") {
@@ -1478,13 +1887,14 @@ function getMaxExecutionBucketTime(time, intervalId) {
 }
 
 function aggregateMaxExecutionHistoryData(historyData) {
-  if (currentMaxExecutionIntervalId === "1d" || historyData.data.length < 2) {
+  const intervalMeta = getSelectedMaxExecutionInterval();
+  if (!intervalMeta?.aggregateInterval || historyData.data.length < 2) {
     return historyData;
   }
 
   const buckets = new Map();
   historyData.data.forEach((point) => {
-    const bucketTime = getMaxExecutionBucketTime(point.time, currentMaxExecutionIntervalId);
+    const bucketTime = getMaxExecutionBucketTime(point.time, intervalMeta.aggregateInterval);
     const existing = buckets.get(bucketTime);
     if (historyData.type === "candles") {
       if (!existing) {
@@ -1512,6 +1922,7 @@ function aggregateMaxExecutionHistoryData(historyData) {
 
   return {
     type: historyData.type,
+    hasCandles: historyData.hasCandles,
     data: [...buckets.values()].sort((left, right) => left.time - right.time),
   };
 }
@@ -1528,6 +1939,7 @@ function getMaxExecutionHistoryData(history) {
     history.o.length === history.t.length &&
     history.h.length === history.t.length &&
     history.l.length === history.t.length;
+  const shouldRenderCandles = currentMaxExecutionChartTypeId === "candles" && hasCandles;
 
   const data = [];
   for (let index = startIndex; index <= endIndex; index += 1) {
@@ -1536,7 +1948,7 @@ function getMaxExecutionHistoryData(history) {
     if (!Number.isFinite(time) || !Number.isFinite(close)) {
       continue;
     }
-    if (hasCandles) {
+    if (shouldRenderCandles) {
       const open = Number(history.o[index]);
       const high = Number(history.h[index]);
       const low = Number(history.l[index]);
@@ -1548,7 +1960,8 @@ function getMaxExecutionHistoryData(history) {
     }
   }
   return aggregateMaxExecutionHistoryData({
-    type: hasCandles ? "candles" : "line",
+    type: shouldRenderCandles ? "candles" : "line",
+    hasCandles,
     data,
   });
 }
@@ -1665,29 +2078,13 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
   }
 
   const renderId = (currentMaxExecutionRenderId += 1);
-  const profile = opportunity ?? getOpportunityProfile(company);
-  const targetContext = resolved ?? profile.resolved;
-  const maxView = buildMaxView(company, profile, targetContext, { includeDetails: false });
-  const levels = maxView.levels;
+  const intervalMeta = getSelectedMaxExecutionInterval();
+  const rangeMeta = getSelectedMaxExecutionRange();
+  const usesFmpHistory = Boolean(intervalMeta?.fmpInterval);
   renderMaxExecutionRangeSwitcher();
+  renderMaxExecutionChartTypeSwitcher();
   renderMaxExecutionIntervalSwitcher();
-
-  if (maxExecutionTitle) {
-    maxExecutionTitle.textContent = `${company.ticker} Max execution map`;
-  }
-  if (maxExecutionSummary) {
-    maxExecutionSummary.textContent = levels
-      ? `Technical call is ${maxView.verdict} with ${maxView.score}/100 conviction. Max overlays real cached daily history with entry near ${formatPriceRange(levels.entryLow, levels.entryHigh)}, stop at ${formatMoney(levels.stop)}, and staged profit-taking into ${formatMoney(levels.target1)}, ${formatMoney(levels.target2)}, then ${formatMoney(levels.target3)}.`
-      : `${company.ticker} is not research-ready enough for Max to draw entry, stop, and take-profit levels yet.`;
-  }
-  if (maxExecutionScore) {
-    maxExecutionScore.textContent = `${maxView.score}/100`;
-  }
-  if (maxExecutionPosition) {
-    maxExecutionPosition.textContent = levels?.position ?? "Waiting for price and range data";
-  }
-  setDecisionBadge("#max-execution-verdict", maxView.verdict);
-  renderMaxExecutionLevelCards(levels);
+  renderMaxLiveStatus();
 
   if (currentMaxExecutionResizeObserver) {
     currentMaxExecutionResizeObserver.disconnect();
@@ -1698,13 +2095,6 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
     currentMaxExecutionChart = null;
   }
 
-  if (!levels) {
-    maxExecutionChartHost.replaceChildren(
-      makeMaxExecutionPlaceholder("Attach price, 52-week high/low, and daily market history to unlock Max's chart."),
-    );
-    return;
-  }
-
   if (!window.LightweightCharts) {
     maxExecutionChartHost.replaceChildren(
       makeMaxExecutionPlaceholder("The chart library did not load. Level cards are still available on the right."),
@@ -1712,28 +2102,115 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
     return;
   }
 
-  maxExecutionChartHost.replaceChildren(makeMaxExecutionPlaceholder("Loading cached daily history for the selected ticker."));
+  const loadingText =
+    usesFmpHistory && maxExecutionLiveEnabled && hasFmpLiveSource()
+      ? `Loading FMP ${intervalMeta.label} bars for ${company.ticker}.`
+      : "Loading cached daily history for the selected ticker.";
+  maxExecutionChartHost.replaceChildren(makeMaxExecutionPlaceholder(loadingText));
+
+  let liveQuote = null;
+  if (maxExecutionLiveEnabled && hasFmpLiveSource()) {
+    try {
+      liveQuote = await fetchFmpQuote(company);
+      renderMaxLiveStatus(liveQuote ? { text: "FMP live" } : { error: true });
+    } catch (error) {
+      liveQuote = null;
+      renderMaxLiveStatus({ error: true });
+    }
+  }
+  if (renderId !== currentMaxExecutionRenderId) {
+    return;
+  }
+
+  const chartCompany = liveQuote?.price
+    ? {
+        ...company,
+        price: liveQuote.price,
+        date: `FMP live quote ${new Date(liveQuote.fetchedAt).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}`,
+      }
+    : company;
+  const profile = opportunity ?? getOpportunityProfile(chartCompany);
+  const targetContext = resolved ?? profile.resolved;
+  const maxView = buildMaxView(chartCompany, profile, targetContext, { includeDetails: false });
+  const levels = maxView.levels;
+
+  if (maxExecutionTitle) {
+    maxExecutionTitle.textContent = `${chartCompany.ticker} Max execution map`;
+  }
+  if (maxExecutionSummary) {
+    const feedLabel =
+      liveQuote?.price && usesFmpHistory
+        ? `FMP ${intervalMeta.label} live/intraday feed`
+        : liveQuote?.price
+          ? "FMP live quote with cached daily history"
+          : usesFmpHistory
+            ? `FMP ${intervalMeta.label} intraday feed`
+            : "cached daily history";
+    maxExecutionSummary.textContent = levels
+      ? `Technical call is ${maxView.verdict} with ${maxView.score}/100 conviction. Max is using ${feedLabel}; current price is ${formatMoney(levels.price)}, entry is near ${formatPriceRange(levels.entryLow, levels.entryHigh)}, stop is ${formatMoney(levels.stop)}, and targets are ${formatMoney(levels.target1)}, ${formatMoney(levels.target2)}, then ${formatMoney(levels.target3)}.`
+      : `${chartCompany.ticker} is not research-ready enough for Max to draw entry, stop, and take-profit levels yet.`;
+  }
+  if (maxExecutionScore) {
+    maxExecutionScore.textContent = `${maxView.score}/100`;
+  }
+  if (maxExecutionPosition) {
+    maxExecutionPosition.textContent = levels?.position ?? "Waiting for price and range data";
+  }
+  setDecisionBadge("#max-execution-verdict", maxView.verdict);
+  renderMaxExecutionLevelCards(levels);
+
+  if (!levels) {
+    maxExecutionChartHost.replaceChildren(
+      makeMaxExecutionPlaceholder("Attach price, 52-week high/low, and market history to unlock Max's chart."),
+    );
+    scheduleMaxLiveRefresh(company);
+    return;
+  }
+
   let history = null;
   try {
-    history = await getCompanyPriceHistory(company);
+    if (usesFmpHistory) {
+      if (!maxExecutionLiveEnabled || !hasFmpLiveSource()) {
+        history = null;
+      } else {
+        history = await fetchFmpIntradayHistory(chartCompany, intervalMeta, rangeMeta);
+      }
+    } else {
+      history = await getCompanyPriceHistory(chartCompany);
+      history = mergeLiveQuoteIntoHistory(history, liveQuote);
+    }
   } catch (error) {
     history = null;
+    if (usesFmpHistory || liveQuote) {
+      renderMaxLiveStatus({ error: true });
+    }
   }
   if (renderId !== currentMaxExecutionRenderId) {
     return;
   }
   if (!history) {
+    const missingMessage =
+      usesFmpHistory && (!maxExecutionLiveEnabled || !hasFmpLiveSource())
+        ? "Connect FMP live feed to use 1m, 15m, or 4h Max intervals. Daily, weekly, and monthly can still use cached history."
+        : usesFmpHistory
+          ? "FMP did not return enough intraday bars for this ticker/range yet. Try a wider range or check the FMP key/proxy."
+          : "No cached daily history chunk is available for this ticker yet. Re-run the market refresh to publish it.";
     maxExecutionChartHost.replaceChildren(
-      makeMaxExecutionPlaceholder("No cached daily history chunk is available for this ticker yet. Re-run the market refresh to publish it."),
+      makeMaxExecutionPlaceholder(missingMessage),
     );
+    scheduleMaxLiveRefresh(company);
     return;
   }
 
   const historyData = getMaxExecutionHistoryData(history);
   if (historyData.data.length < 2) {
     maxExecutionChartHost.replaceChildren(
-      makeMaxExecutionPlaceholder("This selected range does not have enough historical points. Try 1Y or All."),
+      makeMaxExecutionPlaceholder("This selected range does not have enough historical points. Try a wider range or another interval."),
     );
+    scheduleMaxLiveRefresh(company);
     return;
   }
 
@@ -1840,6 +2317,7 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
     chart.timeScale().fitContent();
   });
   currentMaxExecutionResizeObserver.observe(maxExecutionChartHost);
+  scheduleMaxLiveRefresh(company);
 }
 
 function setTextIfExists(selector, value) {
@@ -4264,6 +4742,19 @@ if (finalCallSortButton) {
           : "none";
     refreshExplorer();
   });
+}
+
+if (maxLiveToggle) {
+  maxLiveToggle.addEventListener("click", () => {
+    setMaxLiveEnabled(!maxExecutionLiveEnabled);
+    fmpQuoteCache.clear();
+    fmpHistoryCache.clear();
+    renderMaxExecutionChart(companyUniverseById.get(currentCompanyId));
+  });
+}
+
+if (maxLiveConnect) {
+  maxLiveConnect.addEventListener("click", connectLocalFmpKey);
 }
 
 clearFiltersButton.addEventListener("click", resetFilters);

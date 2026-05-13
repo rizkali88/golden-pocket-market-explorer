@@ -443,17 +443,16 @@ body::before {
 }
 
 .max-execution-panel__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: start;
-  gap: 18px;
+  display: grid;
+  gap: 16px;
 }
 
 .max-execution-panel__tools {
-  display: grid;
-  justify-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: end;
   gap: 10px;
-  flex: 0 0 auto;
 }
 
 .max-execution-panel__header h2 {
@@ -487,6 +486,64 @@ body::before {
   font-weight: 900;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+}
+
+.max-live-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 7px;
+}
+
+.max-live-status,
+.max-live-action {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.max-live-status {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.max-live-status[data-state="on"] {
+  border-color: rgba(99, 210, 200, 0.44);
+  color: var(--accent);
+  background: rgba(99, 210, 200, 0.12);
+}
+
+.max-live-status[data-state="missing"] {
+  border-color: rgba(255, 177, 108, 0.38);
+  color: #ffb16c;
+  background: rgba(255, 177, 108, 0.1);
+}
+
+.max-live-status[data-state="error"] {
+  border-color: rgba(232, 111, 97, 0.42);
+  color: #e86f61;
+  background: rgba(232, 111, 97, 0.1);
+}
+
+.max-live-action {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
+}
+
+.max-live-action:hover {
+  transform: translateY(-1px);
+  border-color: rgba(99, 210, 200, 0.42);
+}
+
+.max-live-action.is-active {
+  border-color: rgba(99, 210, 200, 0.58);
+  background: rgba(99, 210, 200, 0.14);
 }
 
 .max-execution-range-switcher {
@@ -2169,6 +2226,10 @@ p {
 
   .max-execution-control-group {
     justify-items: start;
+  }
+
+  .max-live-strip {
+    justify-content: flex-start;
   }
 
   .max-execution-range-switcher {
