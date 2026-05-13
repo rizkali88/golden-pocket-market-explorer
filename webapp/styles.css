@@ -480,6 +480,10 @@ body::before {
   gap: 5px;
 }
 
+.max-execution-control-group--wide {
+  min-width: min(100%, 270px);
+}
+
 .max-execution-control-group > span {
   color: var(--muted);
   font-size: 0.68rem;
@@ -581,6 +585,13 @@ body::before {
   color: var(--ink);
 }
 
+.max-execution-drawing-button.is-active {
+  border-color: rgba(255, 177, 108, 0.58);
+  background:
+    linear-gradient(135deg, rgba(99, 210, 200, 0.16), rgba(255, 177, 108, 0.14)),
+    rgba(255, 255, 255, 0.06);
+}
+
 .max-execution-chart-shell {
   position: relative;
   overflow: hidden;
@@ -590,6 +601,47 @@ body::before {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
     rgba(8, 18, 28, 0.54);
+}
+
+.max-execution-drawing-legend {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  z-index: 3;
+  width: min(520px, calc(100% - 28px));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  pointer-events: none;
+}
+
+.max-execution-drawing-legend strong,
+.max-execution-drawing-legend span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: rgba(10, 21, 33, 0.78);
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(14px);
+}
+
+.max-execution-drawing-legend strong {
+  color: var(--ink);
+}
+
+.max-execution-drawing-legend span[data-drawing="fib"] {
+  border-color: rgba(201, 211, 148, 0.34);
+}
+
+.max-execution-drawing-legend span[data-drawing="elliott"] {
+  border-color: rgba(201, 167, 255, 0.34);
+}
+
+.max-execution-drawing-legend span[data-drawing="ict"] {
+  border-color: rgba(107, 183, 255, 0.34);
 }
 
 .max-execution-placeholder {

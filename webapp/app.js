@@ -1032,6 +1032,7 @@ const maxLiveConnect = document.querySelector("#max-live-connect");
 const maxExecutionChartTypeSwitcher = document.querySelector("#max-execution-chart-type-switcher");
 const maxExecutionRangeSwitcher = document.querySelector("#max-execution-range-switcher");
 const maxExecutionIntervalSwitcher = document.querySelector("#max-execution-interval-switcher");
+const maxExecutionDrawingSwitcher = document.querySelector("#max-execution-drawing-switcher");
 const layoutSections = [...document.querySelectorAll("[data-layout-id]")].sort(
   (left, right) => Number(left.dataset.layoutId) - Number(right.dataset.layoutId),
 );
@@ -1070,6 +1071,7 @@ let currentMaxExecutionRangeId = "1y";
 let currentMaxExecutionIntervalId = "1d";
 let currentMaxExecutionChartTypeId =
   window.localStorage.getItem("golden-pocket-max-chart-type") || "line";
+let currentMaxExecutionDrawingIds = new Set(["fib"]);
 let currentMaxExecutionRenderId = 0;
 const loadedHistoryChunks = new Set();
 const loadingHistoryChunks = new Map();
@@ -1114,6 +1116,30 @@ const MAX_EXECUTION_INTERVALS = [
   { id: "1w", label: "1W", fmpInterval: "1day", aggregateInterval: "1w", maxDays: 370 },
   { id: "1mo", label: "1M", fmpInterval: "1day", aggregateInterval: "1mo", maxDays: 370 },
 ];
+
+const MAX_EXECUTION_DRAWINGS_STORAGE_KEY = "golden-pocket-max-drawings";
+const MAX_EXECUTION_DRAWINGS = [
+  {
+    id: "fib",
+    label: "Fib",
+    title: "Fibonacci retracement and extension levels",
+    legend: "Fib pocket + extensions",
+  },
+  {
+    id: "elliott",
+    label: "Elliott",
+    title: "Five-step impulse and pullback map",
+    legend: "Elliott wave map",
+  },
+  {
+    id: "ict",
+    label: "ICT",
+    title: "Liquidity, equilibrium, and fair-value-gap proxies",
+    legend: "ICT liquidity + FVG",
+  },
+];
+
+currentMaxExecutionDrawingIds = new Set(loadMaxExecutionDrawingIds());
 
 function makeButton(item, className, onClick) {
   const button = document.createElement("button");
@@ -1368,6 +1394,10 @@ function getMaxExecutionChartPalette() {
     stop: "#e86f61",
     target: "#ffb16c",
     current: "#f2f4fb",
+    fib: "#c9d394",
+    elliott: "#c9a7ff",
+    ict: "#6bb7ff",
+    liquidity: "#ff8f70",
   };
 }
 
@@ -1434,6 +1464,52 @@ function renderMaxExecutionIntervalSwitcher() {
       button.addEventListener("click", () => {
         currentMaxExecutionIntervalId = interval.id;
         renderMaxExecutionIntervalSwitcher();
+        renderMaxExecutionChart(companyUniverseById.get(currentCompanyId));
+      });
+      return button;
+    }),
+  );
+}
+
+function loadMaxExecutionDrawingIds() {
+  const allowedIds = new Set(MAX_EXECUTION_DRAWINGS.map((drawing) => drawing.id));
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(MAX_EXECUTION_DRAWINGS_STORAGE_KEY) ?? "null");
+    const savedIds = Array.isArray(parsed) ? parsed.filter((id) => allowedIds.has(id)) : [];
+    return Array.isArray(parsed) ? savedIds : ["fib"];
+  } catch (error) {
+    return ["fib"];
+  }
+}
+
+function persistMaxExecutionDrawingIds() {
+  window.localStorage.setItem(
+    MAX_EXECUTION_DRAWINGS_STORAGE_KEY,
+    JSON.stringify([...currentMaxExecutionDrawingIds]),
+  );
+}
+
+function renderMaxExecutionDrawingSwitcher() {
+  if (!maxExecutionDrawingSwitcher) {
+    return;
+  }
+  maxExecutionDrawingSwitcher.replaceChildren(
+    ...MAX_EXECUTION_DRAWINGS.map((drawing) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "max-execution-range-button max-execution-drawing-button";
+      button.classList.toggle("is-active", currentMaxExecutionDrawingIds.has(drawing.id));
+      button.textContent = drawing.label;
+      button.title = drawing.title;
+      button.setAttribute("aria-pressed", String(currentMaxExecutionDrawingIds.has(drawing.id)));
+      button.addEventListener("click", () => {
+        if (currentMaxExecutionDrawingIds.has(drawing.id)) {
+          currentMaxExecutionDrawingIds.delete(drawing.id);
+        } else {
+          currentMaxExecutionDrawingIds.add(drawing.id);
+        }
+        persistMaxExecutionDrawingIds();
+        renderMaxExecutionDrawingSwitcher();
         renderMaxExecutionChart(companyUniverseById.get(currentCompanyId));
       });
       return button;
@@ -1841,6 +1917,149 @@ function getPointClose(point) {
   return Number.isFinite(Number(value)) ? Number(value) : null;
 }
 
+function getPointHigh(point) {
+  if (!point) {
+    return null;
+  }
+  const value = "high" in point ? point.high : getPointClose(point);
+  return Number.isFinite(Number(value)) ? Number(value) : null;
+}
+
+function getPointLow(point) {
+  if (!point) {
+    return null;
+  }
+  const value = "low" in point ? point.low : getPointClose(point);
+  return Number.isFinite(Number(value)) ? Number(value) : null;
+}
+
+function getPointAtRatio(data, ratio) {
+  if (!Array.isArray(data) || data.length === 0) {
+    return null;
+  }
+  const index = clampNumber(Math.round((data.length - 1) * ratio), 0, data.length - 1);
+  return data[index];
+}
+
+function findExtremePoint(data, getter, comparator) {
+  if (!Array.isArray(data) || data.length === 0) {
+    return null;
+  }
+  return data.reduce((best, point) => {
+    const value = getter(point);
+    const bestValue = getter(best);
+    if (!Number.isFinite(value)) {
+      return best;
+    }
+    if (!best || !Number.isFinite(bestValue) || comparator(value, bestValue)) {
+      return point;
+    }
+    return best;
+  }, null);
+}
+
+function buildBaseMaxExecutionMarkers(lastTime, levels, palette) {
+  return [
+    {
+      time: lastTime,
+      position: "inBar",
+      color: palette.current,
+      shape: "circle",
+      text: "Current",
+    },
+    {
+      time: lastTime,
+      position: levels.price <= levels.entryHigh ? "belowBar" : "aboveBar",
+      color: palette.entry,
+      shape: "arrowUp",
+      text: "Entry zone",
+    },
+    {
+      time: lastTime,
+      position: "aboveBar",
+      color: palette.target,
+      shape: "arrowUp",
+      text: "TP ladder",
+    },
+  ];
+}
+
+function buildElliottWaveMarkers(data, palette) {
+  if (!currentMaxExecutionDrawingIds.has("elliott") || !Array.isArray(data) || data.length < 5) {
+    return [];
+  }
+  const ratios = [0.12, 0.3, 0.48, 0.66, 0.84];
+  const firstClose = getPointClose(data.at(0)) ?? 0;
+  const lastClose = getPointClose(data.at(-1)) ?? firstClose;
+  const bullish = lastClose >= firstClose;
+  const usedTimes = new Set();
+
+  return ratios
+    .map((ratio, index) => {
+      const point = getPointAtRatio(data, ratio);
+      if (!point?.time || usedTimes.has(point.time)) {
+        return null;
+      }
+      usedTimes.add(point.time);
+      const impulseWave = index % 2 === 0;
+      return {
+        time: point.time,
+        position: bullish === impulseWave ? "aboveBar" : "belowBar",
+        color: impulseWave ? palette.elliott : palette.fib,
+        shape: impulseWave ? "arrowUp" : "circle",
+        text: `Wave ${index + 1}`,
+      };
+    })
+    .filter(Boolean);
+}
+
+function buildIctMarkers(data, levels, palette) {
+  if (!currentMaxExecutionDrawingIds.has("ict") || !Array.isArray(data) || data.length < 3) {
+    return [];
+  }
+  const lookbackData = data.slice(Math.max(0, data.length - 80));
+  const highPoint = findExtremePoint(lookbackData, getPointHigh, (left, right) => left > right);
+  const lowPoint = findExtremePoint(lookbackData, getPointLow, (left, right) => left < right);
+  const lastTime = data.at(-1)?.time;
+  return [
+    highPoint?.time
+      ? {
+          time: highPoint.time,
+          position: "aboveBar",
+          color: palette.liquidity,
+          shape: "circle",
+          text: "BSL",
+        }
+      : null,
+    lowPoint?.time
+      ? {
+          time: lowPoint.time,
+          position: "belowBar",
+          color: palette.liquidity,
+          shape: "circle",
+          text: "SSL",
+        }
+      : null,
+    lastTime
+      ? {
+          time: lastTime,
+          position: levels.price <= levels.entryHigh ? "belowBar" : "aboveBar",
+          color: palette.ict,
+          shape: "arrowUp",
+          text: "ICT entry",
+        }
+      : null,
+  ].filter(Boolean);
+}
+
+function buildMaxExecutionMarkers(lastTime, levels, palette, data = []) {
+  return [
+    ...buildBaseMaxExecutionMarkers(lastTime, levels, palette),
+    ...buildElliottWaveMarkers(data, palette),
+    ...buildIctMarkers(data, levels, palette),
+  ].sort((left, right) => Number(left.time) - Number(right.time));
+}
+
 function getLiveBucketTime(fetchedAt, intervalMeta) {
   const seconds = Math.floor(Number(fetchedAt) / 1000);
   if (!Number.isFinite(seconds)) {
@@ -1865,33 +2084,11 @@ function getLiveBucketTime(fetchedAt, intervalMeta) {
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) / 1000;
 }
 
-function setMaxExecutionMarkers(priceSeries, lastTime, levels, palette) {
+function setMaxExecutionMarkers(priceSeries, lastTime, levels, palette, data = []) {
   if (!priceSeries || !lastTime) {
     return;
   }
-  priceSeries.setMarkers([
-    {
-      time: lastTime,
-      position: "inBar",
-      color: palette.current,
-      shape: "circle",
-      text: "Current",
-    },
-    {
-      time: lastTime,
-      position: levels.price <= levels.entryHigh ? "belowBar" : "aboveBar",
-      color: palette.entry,
-      shape: "arrowUp",
-      text: "Entry zone",
-    },
-    {
-      time: lastTime,
-      position: "aboveBar",
-      color: palette.target,
-      shape: "arrowUp",
-      text: "TP ladder",
-    },
-  ]);
+  priceSeries.setMarkers(buildMaxExecutionMarkers(lastTime, levels, palette, data));
 }
 
 function createCurrentPriceLine(priceSeries, levels, palette) {
@@ -1903,6 +2100,74 @@ function createCurrentPriceLine(priceSeries, levels, palette) {
     axisLabelVisible: true,
     title: "Current",
   });
+}
+
+function createMaxExecutionPriceLine(priceSeries, { title, price, color, lineStyle, lineWidth = 1 }) {
+  const numericPrice = Number(price);
+  if (!priceSeries || !Number.isFinite(numericPrice)) {
+    return null;
+  }
+  return priceSeries.createPriceLine({
+    price: numericPrice,
+    color,
+    lineWidth,
+    lineStyle,
+    axisLabelVisible: true,
+    title,
+  });
+}
+
+function createMaxExecutionDrawingPriceLines(priceSeries, levels, palette) {
+  const lineStyle = window.LightweightCharts.LineStyle;
+  const range = Math.max(levels.high - levels.low, levels.price * 0.08);
+  if (currentMaxExecutionDrawingIds.has("fib")) {
+    [
+      ["Fib 23.6", levels.low + range * 0.236, palette.fib, lineStyle.Dotted],
+      ["Fib 38.2", levels.low + range * 0.382, palette.entry, lineStyle.Dotted],
+      ["Fib 50.0", levels.low + range * 0.5, palette.fib, lineStyle.Dashed],
+      ["Fib 61.8", levels.low + range * 0.618, palette.entry, lineStyle.Dotted],
+      ["Fib 78.6", levels.low + range * 0.786, palette.fib, lineStyle.Dotted],
+      ["Fib 127.2", levels.high + range * 0.272, palette.target, lineStyle.Dashed],
+      ["Fib 161.8", levels.high + range * 0.618, palette.target, lineStyle.Dotted],
+    ].forEach(([title, price, color, style]) => {
+      createMaxExecutionPriceLine(priceSeries, { title, price, color, lineStyle: style });
+    });
+  }
+  if (currentMaxExecutionDrawingIds.has("ict")) {
+    [
+      ["ICT SSL", levels.low, palette.liquidity, lineStyle.Dotted],
+      ["ICT EQ", levels.low + range * 0.5, palette.ict, lineStyle.Dashed],
+      ["ICT BSL", levels.high, palette.liquidity, lineStyle.Dotted],
+      ["ICT FVG Low", levels.entryLow, palette.ict, lineStyle.Dotted],
+      ["ICT FVG High", levels.entryHigh, palette.ict, lineStyle.Dotted],
+    ].forEach(([title, price, color, style]) => {
+      createMaxExecutionPriceLine(priceSeries, { title, price, color, lineStyle: style });
+    });
+  }
+}
+
+function renderMaxExecutionDrawingLegend(host) {
+  if (!host) {
+    return;
+  }
+  const activeDrawings = MAX_EXECUTION_DRAWINGS.filter((drawing) =>
+    currentMaxExecutionDrawingIds.has(drawing.id),
+  );
+  if (activeDrawings.length === 0) {
+    return;
+  }
+  const legend = document.createElement("div");
+  legend.className = "max-execution-drawing-legend";
+  const title = document.createElement("strong");
+  title.textContent = "Max drawings";
+  legend.append(title);
+  activeDrawings.forEach((drawing) => {
+    const item = document.createElement("span");
+    item.textContent = drawing.legend;
+    item.dataset.drawing = drawing.id;
+    legend.append(item);
+  });
+  host.append(legend);
 }
 
 function updateMaxExecutionLiveText(company, maxView, levels, intervalMeta, liveQuote) {
@@ -1989,7 +2254,7 @@ function applyLiveQuoteToCurrentMaxChart(company, liveQuote) {
   state.currentPriceLine = createCurrentPriceLine(state.priceSeries, levels, state.palette);
   state.data = data;
   state.levels = levels;
-  setMaxExecutionMarkers(state.priceSeries, updatedPoint.time, levels, state.palette);
+  setMaxExecutionMarkers(state.priceSeries, updatedPoint.time, levels, state.palette, data);
   updateMaxExecutionLiveText(chartCompany, maxView, levels, state.intervalMeta, liveQuote);
   renderMaxLiveStatus({ text: "FMP live" });
   return true;
@@ -2271,6 +2536,7 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
   renderMaxExecutionRangeSwitcher();
   renderMaxExecutionChartTypeSwitcher();
   renderMaxExecutionIntervalSwitcher();
+  renderMaxExecutionDrawingSwitcher();
   renderMaxLiveStatus();
 
   if (currentMaxExecutionResizeObserver) {
@@ -2466,21 +2732,16 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
     ["TP2", levels.target2, palette.target, dashed],
     ["TP3", levels.target3, palette.target, dotted],
   ].forEach(([title, price, color, lineStyle]) => {
-    priceSeries.createPriceLine({
-      price,
-      color,
-      lineWidth: title === "Current" ? 2 : 1,
-      lineStyle,
-      axisLabelVisible: true,
-      title,
-    });
+    createMaxExecutionPriceLine(priceSeries, { title, price, color, lineStyle });
   });
+  createMaxExecutionDrawingPriceLines(priceSeries, levels, palette);
   currentPriceLine = createCurrentPriceLine(priceSeries, levels, palette);
 
   const lastTime = historyData.data.at(-1)?.time;
   if (lastTime) {
-    setMaxExecutionMarkers(priceSeries, lastTime, levels, palette);
+    setMaxExecutionMarkers(priceSeries, lastTime, levels, palette, historyData.data);
   }
+  renderMaxExecutionDrawingLegend(maxExecutionChartHost);
 
   chart.timeScale().fitContent();
   currentMaxExecutionChart = chart;
