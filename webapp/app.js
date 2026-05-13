@@ -1093,6 +1093,7 @@ const loadingHistoryChunks = new Map();
 const fmpHistoryCache = new Map();
 const fmpQuoteCache = new Map();
 const paperBotMarkPriceCache = new Map();
+const decisionModelCache = new Map();
 let maxExecutionLiveTimer = null;
 let paperBotLiveTimer = null;
 let paperBotLiveRefreshInFlight = false;
@@ -3450,6 +3451,22 @@ function getOpportunityProfile(company, requestedMethodId = currentTargetMethodI
     rangePositionPct: getRangePositionPct(company),
     belowHighPct: getBelowHighPct(company),
   };
+}
+
+function getDecisionModel(company) {
+  const cacheKey = `${company.id}:${currentScenarioId}:${currentTargetMethodId}`;
+  const cached = decisionModelCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  const opportunity = getOpportunityProfile(company);
+  const resolved = opportunity.resolved;
+  const johnView = buildJohnView(company, opportunity, resolved, { includeDetails: false });
+  const maxView = buildMaxView(company, opportunity, resolved, { includeDetails: false });
+  const decision = combineTradingDecision(johnView, maxView);
+  const model = { company, opportunity, resolved, johnView, maxView, decision };
+  decisionModelCache.set(cacheKey, model);
+  return model;
 }
 
 function summarizeScenarioSignal({
@@ -5872,19 +5889,7 @@ function renderOpportunityTable() {
   const filteredUniverse = getFilteredUniverse();
   const searchTerm = currentFilters.search.trim().toLowerCase();
   const finalCallRank = { Buy: 4, Watch: 3, Wait: 2, Avoid: 1 };
-  const opportunityCache = new Map();
-  const decisionCache = new Map();
-  const tableModels = filteredUniverse.map((company) => {
-    const opportunity = getOpportunityProfile(company);
-    const resolved = opportunity.resolved;
-    const johnView = buildJohnView(company, opportunity, resolved, { includeDetails: false });
-    const maxView = buildMaxView(company, opportunity, resolved, { includeDetails: false });
-    const decision = combineTradingDecision(johnView, maxView);
-    const model = { company, opportunity, resolved, johnView, maxView, decision };
-    opportunityCache.set(company.id, opportunity);
-    decisionCache.set(company.id, model);
-    return model;
-  });
+  const tableModels = filteredUniverse.map(getDecisionModel);
   const rankedModels = tableModels
     .filter((model) => currentFilters.finalCall === "all" || model.decision.finalCall === currentFilters.finalCall)
     .sort((leftModel, rightModel) => {
@@ -5910,8 +5915,8 @@ function renderOpportunityTable() {
         return relevanceDelta;
       }
     }
-    const leftProfile = opportunityCache.get(left.id);
-    const rightProfile = opportunityCache.get(right.id);
+    const leftProfile = leftModel.opportunity;
+    const rightProfile = rightModel.opportunity;
     if (leftProfile.opportunityScore !== rightProfile.opportunityScore) {
       return rightProfile.opportunityScore - leftProfile.opportunityScore;
     }

@@ -579,7 +579,7 @@ def write_outputs(payload: dict[str, Any], output_dir: Path) -> tuple[Path, Path
     output_dir.mkdir(parents=True, exist_ok=True)
     json_path = output_dir / "market_universe.json"
     js_path = output_dir / "market_universe.js"
-    serialized = json.dumps(payload, indent=2)
+    serialized = json.dumps(payload, separators=(",", ":"))
     json_path.write_text(serialized, encoding="utf-8")
     js_path.write_text(f"window.GOLDEN_POCKET_UNIVERSE = {serialized};\n", encoding="utf-8")
     return json_path, js_path

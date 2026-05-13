@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golden Pocket Market Explorer - Working Draft</title>
-    <link rel="stylesheet" href="./styles.css?v=20260514-remove-target-trigger" />
+    <link rel="stylesheet" href="./styles.css?v=20260514-performance-cleanup" />
   </head>
   <body class="workbench-page">
     <div class="app-shell">
@@ -575,14 +575,13 @@
 
     <script>
       (() => {
-        const cacheVersion = String(Date.now());
-        const scripts = [
+        const cacheVersion = "20260514-performance-cleanup";
+        const dependencyScripts = [
           "./data/market_universe.js",
           "./data/research_profiles.js",
           "./data/history/index.js",
           "./data/live_config.js",
           "https://unpkg.com/lightweight-charts@4.2.2/dist/lightweight-charts.standalone.production.js",
-          "./app.js",
         ];
         const versionedSource = (source) =>
           source.startsWith("./")
@@ -592,13 +591,14 @@
           new Promise((resolve, reject) => {
             const script = document.createElement("script");
             script.src = versionedSource(source);
+            script.async = true;
             script.onload = resolve;
             script.onerror = () => reject(new Error(`Failed to load ${source}`));
             document.body.append(script);
           });
 
-        scripts
-          .reduce((promise, source) => promise.then(() => loadScript(source)), Promise.resolve())
+        Promise.all(dependencyScripts.map(loadScript))
+          .then(() => loadScript("./app.js"))
           .catch((error) => {
             document.body.dataset.bootError = error.message;
             console.error(error);
