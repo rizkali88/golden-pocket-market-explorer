@@ -1064,6 +1064,7 @@ const currentFilters = {
 let layoutModeResetTimer = null;
 let currentTradingViewKey = "";
 let currentMaxExecutionChart = null;
+let currentMaxExecutionChartState = null;
 let currentMaxExecutionResizeObserver = null;
 let currentMaxExecutionRangeId = "1y";
 let currentMaxExecutionIntervalId = "1d";
@@ -1109,9 +1110,9 @@ const MAX_EXECUTION_INTERVALS = [
   { id: "1min", label: "1m", fmpInterval: "1min", maxDays: 5 },
   { id: "15min", label: "15m", fmpInterval: "15min", maxDays: 45 },
   { id: "4hour", label: "4H", fmpInterval: "4hour", maxDays: 370 },
-  { id: "1d", label: "1D" },
-  { id: "1w", label: "1W", aggregateInterval: "1w" },
-  { id: "1mo", label: "1M", aggregateInterval: "1mo" },
+  { id: "1d", label: "1D", fmpInterval: "1day", maxDays: 370 },
+  { id: "1w", label: "1W", fmpInterval: "1day", aggregateInterval: "1w", maxDays: 370 },
+  { id: "1mo", label: "1M", fmpInterval: "1day", aggregateInterval: "1mo", maxDays: 370 },
 ];
 
 function makeButton(item, className, onClick) {
@@ -1547,6 +1548,9 @@ function renderMaxLiveStatus(status = {}) {
   } else if (maxExecutionLiveEnabled && hasSource) {
     state = "on";
     text = status.text || "FMP live";
+  } else if (hasSource) {
+    state = "on";
+    text = "FMP ready";
   }
   maxLiveStatus.dataset.state = state;
   maxLiveStatus.textContent = text;
@@ -1610,6 +1614,9 @@ function buildFmpRequestUrl(kind, params = {}) {
   }
   const interval = searchParams.get("interval");
   searchParams.delete("interval");
+  if (interval === "1day") {
+    return `${FMP_DIRECT_BASE_URL}/historical-price-eod/full?${searchParams.toString()}`;
+  }
   return `${FMP_DIRECT_BASE_URL}/historical-chart/${interval}?${searchParams.toString()}`;
 }
 
@@ -1826,6 +1833,187 @@ function mergeLiveQuoteIntoHistory(history, liveQuote) {
   return result;
 }
 
+function getPointClose(point) {
+  if (!point) {
+    return null;
+  }
+  const value = "close" in point ? point.close : point.value;
+  return Number.isFinite(Number(value)) ? Number(value) : null;
+}
+
+function getLiveBucketTime(fetchedAt, intervalMeta) {
+  const seconds = Math.floor(Number(fetchedAt) / 1000);
+  if (!Number.isFinite(seconds)) {
+    return null;
+  }
+  if (intervalMeta?.id === "1min") {
+    return Math.floor(seconds / 60) * 60;
+  }
+  if (intervalMeta?.id === "15min") {
+    return Math.floor(seconds / 900) * 900;
+  }
+  if (intervalMeta?.id === "4hour") {
+    return Math.floor(seconds / 14400) * 14400;
+  }
+  if (intervalMeta?.id === "1w") {
+    return getMaxExecutionBucketTime(seconds, "1w");
+  }
+  if (intervalMeta?.id === "1mo") {
+    return getMaxExecutionBucketTime(seconds, "1mo");
+  }
+  const date = new Date(seconds * 1000);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) / 1000;
+}
+
+function setMaxExecutionMarkers(priceSeries, lastTime, levels, palette) {
+  if (!priceSeries || !lastTime) {
+    return;
+  }
+  priceSeries.setMarkers([
+    {
+      time: lastTime,
+      position: "inBar",
+      color: palette.current,
+      shape: "circle",
+      text: "Current",
+    },
+    {
+      time: lastTime,
+      position: levels.price <= levels.entryHigh ? "belowBar" : "aboveBar",
+      color: palette.entry,
+      shape: "arrowUp",
+      text: "Entry zone",
+    },
+    {
+      time: lastTime,
+      position: "aboveBar",
+      color: palette.target,
+      shape: "arrowUp",
+      text: "TP ladder",
+    },
+  ]);
+}
+
+function createCurrentPriceLine(priceSeries, levels, palette) {
+  return priceSeries.createPriceLine({
+    price: levels.price,
+    color: palette.current,
+    lineWidth: 2,
+    lineStyle: window.LightweightCharts.LineStyle.Solid,
+    axisLabelVisible: true,
+    title: "Current",
+  });
+}
+
+function updateMaxExecutionLiveText(company, maxView, levels, intervalMeta, liveQuote) {
+  if (maxExecutionSummary) {
+    const feedLabel = intervalMeta?.fmpInterval
+      ? `FMP ${intervalMeta.label} OHLC bars plus live quote`
+      : "FMP live quote over cached history";
+    maxExecutionSummary.textContent = levels
+      ? `Technical call is ${maxView.verdict} with ${maxView.score}/100 conviction. Max is using ${feedLabel}; current price is ${formatMoney(levels.price)}, entry is near ${formatPriceRange(levels.entryLow, levels.entryHigh)}, stop is ${formatMoney(levels.stop)}, and targets are ${formatMoney(levels.target1)}, ${formatMoney(levels.target2)}, then ${formatMoney(levels.target3)}. Last tick ${new Date(liveQuote.fetchedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}.`
+      : `${company.ticker} is not research-ready enough for Max to draw entry, stop, and take-profit levels yet.`;
+  }
+  if (maxExecutionScore) {
+    maxExecutionScore.textContent = `${maxView.score}/100`;
+  }
+  if (maxExecutionPosition) {
+    maxExecutionPosition.textContent = levels?.position ?? "Waiting for price and range data";
+  }
+  setDecisionBadge("#max-execution-verdict", maxView.verdict);
+  renderMaxExecutionLevelCards(levels);
+}
+
+function applyLiveQuoteToCurrentMaxChart(company, liveQuote) {
+  const state = currentMaxExecutionChartState;
+  if (!state || !state.priceSeries || state.ticker !== company?.ticker || !liveQuote?.price) {
+    return false;
+  }
+  const bucketTime = getLiveBucketTime(liveQuote.fetchedAt, state.intervalMeta);
+  if (!bucketTime) {
+    return false;
+  }
+
+  const chartCompany = {
+    ...company,
+    price: liveQuote.price,
+    date: `FMP live quote ${new Date(liveQuote.fetchedAt).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })}`,
+  };
+  const profile = getOpportunityProfile(chartCompany);
+  const targetContext = profile.resolved;
+  const maxView = buildMaxView(chartCompany, profile, targetContext, { includeDetails: false });
+  const levels = maxView.levels;
+  if (!levels) {
+    return false;
+  }
+
+  const data = [...state.data];
+  const last = data.at(-1);
+  const lastClose = getPointClose(last) ?? liveQuote.price;
+  let updatedPoint;
+  if (state.seriesType === "candles") {
+    if (last && last.time === bucketTime) {
+      updatedPoint = {
+        ...last,
+        high: Math.max(Number(last.high), liveQuote.price),
+        low: Math.min(Number(last.low), liveQuote.price),
+        close: liveQuote.price,
+      };
+      data[data.length - 1] = updatedPoint;
+    } else {
+      updatedPoint = {
+        time: bucketTime,
+        open: lastClose,
+        high: Math.max(lastClose, liveQuote.price),
+        low: Math.min(lastClose, liveQuote.price),
+        close: liveQuote.price,
+      };
+      data.push(updatedPoint);
+    }
+  } else if (last && last.time === bucketTime) {
+    updatedPoint = { ...last, value: liveQuote.price };
+    data[data.length - 1] = updatedPoint;
+  } else {
+    updatedPoint = { time: bucketTime, value: liveQuote.price };
+    data.push(updatedPoint);
+  }
+
+  state.priceSeries.update(updatedPoint);
+  if (state.currentPriceLine && state.priceSeries.removePriceLine) {
+    state.priceSeries.removePriceLine(state.currentPriceLine);
+  }
+  state.currentPriceLine = createCurrentPriceLine(state.priceSeries, levels, state.palette);
+  state.data = data;
+  state.levels = levels;
+  setMaxExecutionMarkers(state.priceSeries, updatedPoint.time, levels, state.palette);
+  updateMaxExecutionLiveText(chartCompany, maxView, levels, state.intervalMeta, liveQuote);
+  renderMaxLiveStatus({ text: "FMP live" });
+  return true;
+}
+
+async function updateMaxExecutionLiveTick(company) {
+  if (!maxExecutionLiveEnabled || !hasFmpLiveSource() || !company) {
+    return;
+  }
+  try {
+    fmpQuoteCache.delete(company.ticker);
+    const liveQuote = await fetchFmpQuote(company);
+    if (!liveQuote) {
+      renderMaxLiveStatus({ error: true });
+      return;
+    }
+    if (!applyLiveQuoteToCurrentMaxChart(company, liveQuote)) {
+      renderMaxExecutionChart(companyUniverseById.get(currentCompanyId));
+    }
+  } catch (error) {
+    renderMaxLiveStatus({ error: true });
+  }
+}
+
 function scheduleMaxLiveRefresh(company) {
   if (maxExecutionLiveTimer) {
     window.clearInterval(maxExecutionLiveTimer);
@@ -1835,11 +2023,7 @@ function scheduleMaxLiveRefresh(company) {
     return;
   }
   maxExecutionLiveTimer = window.setInterval(() => {
-    fmpQuoteCache.delete(company.ticker);
-    if (getSelectedMaxExecutionInterval()?.fmpInterval) {
-      fmpHistoryCache.clear();
-    }
-    renderMaxExecutionChart(companyUniverseById.get(currentCompanyId));
+    updateMaxExecutionLiveTick(companyUniverseById.get(currentCompanyId));
   }, getLivePollSeconds() * 1000);
 }
 
@@ -2080,7 +2264,10 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
   const renderId = (currentMaxExecutionRenderId += 1);
   const intervalMeta = getSelectedMaxExecutionInterval();
   const rangeMeta = getSelectedMaxExecutionRange();
-  const usesFmpHistory = Boolean(intervalMeta?.fmpInterval);
+  const isIntradayInterval = ["1min", "15min", "4hour"].includes(intervalMeta?.id);
+  const usesFmpHistory =
+    isIntradayInterval ||
+    (currentMaxExecutionChartTypeId === "candles" && hasFmpLiveSource() && Boolean(intervalMeta?.fmpInterval));
   renderMaxExecutionRangeSwitcher();
   renderMaxExecutionChartTypeSwitcher();
   renderMaxExecutionIntervalSwitcher();
@@ -2093,6 +2280,7 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
   if (currentMaxExecutionChart?.remove) {
     currentMaxExecutionChart.remove();
     currentMaxExecutionChart = null;
+    currentMaxExecutionChartState = null;
   }
 
   if (!window.LightweightCharts) {
@@ -2103,7 +2291,7 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
   }
 
   const loadingText =
-    usesFmpHistory && maxExecutionLiveEnabled && hasFmpLiveSource()
+    usesFmpHistory && hasFmpLiveSource()
       ? `Loading FMP ${intervalMeta.label} bars for ${company.ticker}.`
       : "Loading cached daily history for the selected ticker.";
   maxExecutionChartHost.replaceChildren(makeMaxExecutionPlaceholder(loadingText));
@@ -2143,11 +2331,11 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
   if (maxExecutionSummary) {
     const feedLabel =
       liveQuote?.price && usesFmpHistory
-        ? `FMP ${intervalMeta.label} live/intraday feed`
+        ? `FMP ${intervalMeta.label} OHLC bars plus live quote`
         : liveQuote?.price
           ? "FMP live quote with cached daily history"
           : usesFmpHistory
-            ? `FMP ${intervalMeta.label} intraday feed`
+            ? `FMP ${intervalMeta.label} OHLC bars`
             : "cached daily history";
     maxExecutionSummary.textContent = levels
       ? `Technical call is ${maxView.verdict} with ${maxView.score}/100 conviction. Max is using ${feedLabel}; current price is ${formatMoney(levels.price)}, entry is near ${formatPriceRange(levels.entryLow, levels.entryHigh)}, stop is ${formatMoney(levels.stop)}, and targets are ${formatMoney(levels.target1)}, ${formatMoney(levels.target2)}, then ${formatMoney(levels.target3)}.`
@@ -2173,7 +2361,7 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
   let history = null;
   try {
     if (usesFmpHistory) {
-      if (!maxExecutionLiveEnabled || !hasFmpLiveSource()) {
+      if (!hasFmpLiveSource()) {
         history = null;
       } else {
         history = await fetchFmpIntradayHistory(chartCompany, intervalMeta, rangeMeta);
@@ -2193,8 +2381,8 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
   }
   if (!history) {
     const missingMessage =
-      usesFmpHistory && (!maxExecutionLiveEnabled || !hasFmpLiveSource())
-        ? "Connect FMP live feed to use 1m, 15m, or 4h Max intervals. Daily, weekly, and monthly can still use cached history."
+      usesFmpHistory && !hasFmpLiveSource()
+        ? "Connect an FMP key to use 1m, 15m, 4h, or true OHLC candle history. Daily line mode can still use cached history."
         : usesFmpHistory
           ? "FMP did not return enough intraday bars for this ticker/range yet. Try a wider range or check the FMP key/proxy."
           : "No cached daily history chunk is available for this ticker yet. Re-run the market refresh to publish it.";
@@ -2206,6 +2394,13 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
   }
 
   const historyData = getMaxExecutionHistoryData(history);
+  if (currentMaxExecutionChartTypeId === "candles" && !historyData.hasCandles) {
+    maxExecutionChartHost.replaceChildren(
+      makeMaxExecutionPlaceholder("Candles need OHLC history. Connect FMP for true candle data or switch this chart back to Line."),
+    );
+    scheduleMaxLiveRefresh(company);
+    return;
+  }
   if (historyData.data.length < 2) {
     maxExecutionChartHost.replaceChildren(
       makeMaxExecutionPlaceholder("This selected range does not have enough historical points. Try a wider range or another interval."),
@@ -2261,12 +2456,12 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
 
   const dashed = window.LightweightCharts.LineStyle.Dashed;
   const dotted = window.LightweightCharts.LineStyle.Dotted;
+  let currentPriceLine = null;
   [
     ["SL", levels.stop, palette.stop, dashed],
     ["Add Low", levels.addLow, palette.add, dotted],
     ["Entry Low", levels.entryLow, palette.entry, dashed],
     ["Entry High", levels.entryHigh, palette.entry, dashed],
-    ["Current", levels.price, palette.current, window.LightweightCharts.LineStyle.Solid],
     ["TP1", levels.target1, palette.target, dashed],
     ["TP2", levels.target2, palette.target, dashed],
     ["TP3", levels.target3, palette.target, dotted],
@@ -2280,36 +2475,26 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
       title,
     });
   });
+  currentPriceLine = createCurrentPriceLine(priceSeries, levels, palette);
 
   const lastTime = historyData.data.at(-1)?.time;
   if (lastTime) {
-    priceSeries.setMarkers([
-      {
-        time: lastTime,
-        position: "inBar",
-        color: palette.current,
-        shape: "circle",
-        text: "Current",
-      },
-      {
-        time: lastTime,
-        position: levels.price <= levels.entryHigh ? "belowBar" : "aboveBar",
-        color: palette.entry,
-        shape: "arrowUp",
-        text: "Entry zone",
-      },
-      {
-        time: lastTime,
-        position: "aboveBar",
-        color: palette.target,
-        shape: "arrowUp",
-        text: "TP ladder",
-      },
-    ]);
+    setMaxExecutionMarkers(priceSeries, lastTime, levels, palette);
   }
 
   chart.timeScale().fitContent();
   currentMaxExecutionChart = chart;
+  currentMaxExecutionChartState = {
+    ticker: chartCompany.ticker,
+    chart,
+    priceSeries,
+    currentPriceLine,
+    palette,
+    intervalMeta,
+    seriesType: historyData.type,
+    data: historyData.data,
+    levels,
+  };
   currentMaxExecutionResizeObserver = new ResizeObserver(([entry]) => {
     const width = Math.floor(entry.contentRect.width);
     const height = Math.max(Math.floor(entry.contentRect.height), 300);

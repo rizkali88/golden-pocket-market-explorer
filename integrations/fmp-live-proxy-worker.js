@@ -1,5 +1,5 @@
 const FMP_BASE_URL = "https://financialmodelingprep.com/stable";
-const ALLOWED_INTERVALS = new Set(["1min", "15min", "4hour"]);
+const ALLOWED_INTERVALS = new Set(["1min", "15min", "4hour", "1day"]);
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -77,6 +77,17 @@ export default {
       const interval = String(url.searchParams.get("interval") || "");
       if (!ALLOWED_INTERVALS.has(interval)) {
         return jsonResponse({ error: "Unsupported interval." }, 400);
+      }
+      if (interval === "1day") {
+        return fetchFmp(
+          "/historical-price-eod/full",
+          {
+            symbol,
+            from: cleanDate(url.searchParams.get("from")),
+            to: cleanDate(url.searchParams.get("to")),
+          },
+          env,
+        );
       }
       return fetchFmp(
         `/historical-chart/${interval}`,
