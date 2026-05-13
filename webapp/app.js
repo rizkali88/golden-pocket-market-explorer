@@ -4943,6 +4943,9 @@ function combineTradingDecision(johnView, maxView) {
 
 function createDefaultPaperBotState() {
   return {
+    mode: "local_browser_paper",
+    manager: "Max",
+    startingCash: PAPER_BOT_STARTING_CASH,
     cash: PAPER_BOT_STARTING_CASH,
     realizedPnl: 0,
     positions: {},
@@ -4952,29 +4955,37 @@ function createDefaultPaperBotState() {
   };
 }
 
+function normalizePaperBotState(rawState) {
+  if (!rawState || typeof rawState !== "object") {
+    return null;
+  }
+  const defaults = createDefaultPaperBotState();
+  return {
+    ...defaults,
+    ...rawState,
+    cash: Number.isFinite(Number(rawState.cash)) ? Number(rawState.cash) : defaults.cash,
+    realizedPnl: Number.isFinite(Number(rawState.realizedPnl)) ? Number(rawState.realizedPnl) : 0,
+    positions:
+      rawState.positions && typeof rawState.positions === "object" && !Array.isArray(rawState.positions)
+        ? rawState.positions
+        : {},
+    trades: Array.isArray(rawState.trades) ? rawState.trades.slice(0, 250) : [],
+    lastEvaluations:
+      rawState.lastEvaluations && typeof rawState.lastEvaluations === "object"
+        ? rawState.lastEvaluations
+        : {},
+    autoEnabled: rawState.autoEnabled !== false,
+  };
+}
+
 function loadPaperBotState() {
+  const cloudState = normalizePaperBotState(window.GOLDEN_POCKET_MAX_BOT);
+  if (cloudState?.mode === "max_autonomous_cloud") {
+    return cloudState;
+  }
   try {
     const parsed = JSON.parse(window.localStorage.getItem(PAPER_BOT_STORAGE_KEY) ?? "null");
-    if (!parsed || typeof parsed !== "object") {
-      return createDefaultPaperBotState();
-    }
-    const defaults = createDefaultPaperBotState();
-    return {
-      ...defaults,
-      ...parsed,
-      cash: Number.isFinite(Number(parsed.cash)) ? Number(parsed.cash) : defaults.cash,
-      realizedPnl: Number.isFinite(Number(parsed.realizedPnl)) ? Number(parsed.realizedPnl) : 0,
-      positions:
-        parsed.positions && typeof parsed.positions === "object" && !Array.isArray(parsed.positions)
-          ? parsed.positions
-          : {},
-      trades: Array.isArray(parsed.trades) ? parsed.trades.slice(-200) : [],
-      lastEvaluations:
-        parsed.lastEvaluations && typeof parsed.lastEvaluations === "object"
-          ? parsed.lastEvaluations
-          : {},
-      autoEnabled: parsed.autoEnabled !== false,
-    };
+    return normalizePaperBotState(parsed) ?? createDefaultPaperBotState();
   } catch (error) {
     return createDefaultPaperBotState();
   }
@@ -5381,6 +5392,10 @@ function renderPaperBotPanelForCurrentSelection(plan = null) {
 }
 
 async function refreshPaperBotLiveMarks(options = {}) {
+  if (paperBotState.mode === "max_autonomous_cloud") {
+    renderPaperBotPanelForCurrentSelection();
+    return;
+  }
   if (paperBotLiveRefreshInFlight) {
     return;
   }
@@ -5450,6 +5465,9 @@ async function refreshPaperBotLiveMarks(options = {}) {
 }
 
 function schedulePaperBotLiveRefresh(options = {}) {
+  if (paperBotState.mode === "max_autonomous_cloud") {
+    return;
+  }
   if (paperBotLiveTimer) {
     window.clearInterval(paperBotLiveTimer);
     paperBotLiveTimer = null;
@@ -5490,12 +5508,46 @@ function makePaperBotEmptyRow(message, columns) {
   return row;
 }
 
+function getMaxCloudBotPlanSummary(snapshot) {
+  const latestTrade = paperBotState.trades?.[0];
+  const generatedLabel = paperBotState.generatedAt
+    ? new Date(paperBotState.generatedAt).toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "not run yet";
+  if (latestTrade) {
+    return {
+      action: latestTrade.type === "SELL" ? "SELL" : latestTrade.type === "BUY" ? "BUY" : "HOLD",
+      label: `Max ${latestTrade.type}`,
+      reason: `${latestTrade.reason} Last autonomous run: ${generatedLabel}.`,
+    };
+  }
+  if (snapshot.positions.length > 0) {
+    return {
+      action: "HOLD",
+      label: "Max managing risk",
+      reason: `${paperBotState.lastRunSummary ?? "Max is managing open paper positions."} Last autonomous run: ${generatedLabel}.`,
+    };
+  }
+  return {
+    action: "WAIT",
+    label: "Max scanning",
+    reason: `${paperBotState.lastRunSummary ?? "Max is waiting for a clean technical entry."} Last autonomous run: ${generatedLabel}.`,
+  };
+}
+
 function renderPaperBotPanel(company = null, johnView = null, maxView = null, decision = null, plan = null) {
   if (!paperBotEquity) {
     return;
   }
   const snapshot = getPaperBotSnapshot(company);
-  const activePlan = plan ?? calculatePaperBotPlan(company, johnView, maxView, decision);
+  const activePlan =
+    paperBotState.mode === "max_autonomous_cloud" && !plan
+      ? getMaxCloudBotPlanSummary(snapshot)
+      : plan ?? calculatePaperBotPlan(company, johnView, maxView, decision);
   const openTone = snapshot.unrealizedPnl > 0 ? "positive" : snapshot.unrealizedPnl < 0 ? "negative" : "";
   const realizedTone = snapshot.realizedPnl > 0 ? "positive" : snapshot.realizedPnl < 0 ? "negative" : "";
 
@@ -5655,9 +5707,6 @@ function renderAgentDashboards(company, opportunity, resolved) {
   const maxView = buildMaxView(company, opportunity, resolved);
   const decision = combineTradingDecision(johnView, maxView);
   const levels = maxView.levels;
-  const paperBotPlan = evaluatePaperBotForSelection(company, johnView, maxView, decision, {
-    execute: paperBotState.autoEnabled,
-  });
 
   setDecisionBadge("#john-verdict", johnView.verdict);
   setDecisionBadge("#max-verdict", maxView.verdict);
@@ -5714,7 +5763,7 @@ function renderAgentDashboards(company, opportunity, resolved) {
       }),
     );
   }
-  renderPaperBotPanel(company, johnView, maxView, decision, paperBotPlan);
+  renderPaperBotPanel(company, johnView, maxView, decision);
 }
 
 function renderCompany(id) {

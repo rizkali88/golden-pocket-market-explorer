@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golden Pocket Market Explorer - Working Draft</title>
-    <link rel="stylesheet" href="./styles.css?v=20260514-performance-cleanup" />
+    <link rel="stylesheet" href="./styles.css?v=20260514-max-cloud-bot" />
   </head>
   <body class="workbench-page">
     <div class="app-shell">
@@ -84,15 +84,15 @@
             <div class="paper-bot-panel__header">
               <div>
                 <p class="eyebrow">Paper Trading Bot</p>
-                <h2>$10,000 dummy account following Fundamental + Technical</h2>
+                <h2>$10,000 dummy account run by Max Technical</h2>
                 <p class="paper-bot-panel__note">
-                  Local simulation only. The bot reads the current Trading Decision, sizes a spot position, and records paper activity in this browser.
+                  Paper simulation only. Max scans the market on a cloud schedule, opens/exits from technical analysis, and this page displays the latest saved state.
                 </p>
               </div>
               <div class="paper-bot-actions" aria-label="Paper bot controls">
-                <button type="button" class="paper-bot-button" id="paper-bot-auto-toggle" aria-pressed="true">Auto paper: On</button>
-                <button type="button" class="paper-bot-button" id="paper-bot-evaluate">Evaluate ticker</button>
-                <button type="button" class="paper-bot-button paper-bot-button--ghost" id="paper-bot-reset">Reset $10k</button>
+                <button type="button" class="paper-bot-button" id="paper-bot-auto-toggle" aria-pressed="true" hidden>Max cloud: On</button>
+                <button type="button" class="paper-bot-button" id="paper-bot-evaluate" hidden>Manual evaluate</button>
+                <button type="button" class="paper-bot-button paper-bot-button--ghost" id="paper-bot-reset" hidden>Reset local $10k</button>
               </div>
             </div>
 
@@ -106,7 +106,7 @@
               <article class="paper-bot-card paper-bot-card--instruction">
                 <span>Current instruction</span>
                 <strong id="paper-bot-instruction">Awaiting ticker</strong>
-                <small id="paper-bot-reason">Select a ticker to let the paper bot read the combined decision.</small>
+                <small id="paper-bot-reason">Waiting for Max's cloud paper bot state.</small>
               </article>
             </div>
 
@@ -398,7 +398,8 @@
         const readPaperBotState = () => {
           try {
             const stored = window.localStorage.getItem(storageKey);
-            return stored ? JSON.parse(stored) : null;
+            const parsed = stored ? JSON.parse(stored) : null;
+            return parsed?.mode === "max_autonomous_cloud" ? parsed : null;
           } catch {
             return null;
           }
@@ -575,18 +576,22 @@
 
     <script>
       (() => {
-        const cacheVersion = "20260514-performance-cleanup";
+        const cacheVersion = "20260514-max-cloud-bot";
+        const liveStateVersion = String(Date.now());
         const dependencyScripts = [
           "./data/market_universe.js",
           "./data/research_profiles.js",
           "./data/history/index.js",
           "./data/live_config.js",
+          "./data/max_bot_state.js",
           "https://unpkg.com/lightweight-charts@4.2.2/dist/lightweight-charts.standalone.production.js",
         ];
         const versionedSource = (source) =>
-          source.startsWith("./")
-            ? `${source}?v=${cacheVersion}`
-            : source;
+          source.endsWith("/max_bot_state.js")
+            ? `${source}?v=${liveStateVersion}`
+            : source.startsWith("./")
+              ? `${source}?v=${cacheVersion}`
+              : source;
         const loadScript = (source) =>
           new Promise((resolve, reject) => {
             const script = document.createElement("script");

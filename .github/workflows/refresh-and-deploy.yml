@@ -14,6 +14,7 @@ on:
       - "build_market_system.py"
       - "build_market_universe.py"
       - "build_research_profiles.py"
+      - "build_max_paper_bot.py"
       - "golden_pocket/**"
       - "webapp/**"
 
@@ -76,6 +77,18 @@ jobs:
             --research-pause-seconds 0.25 \
             --daily-history-range 10y
 
+      - name: Run Max autonomous paper bot
+        env:
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+        run: |
+          python build_max_paper_bot.py \
+            --profiles-path webapp/data/research_profiles.json \
+            --state-path webapp/data/max_bot_state.json \
+            --js-path webapp/data/max_bot_state.js \
+            --max-open-positions 8 \
+            --quote-candidate-limit 250 \
+            --quote-batch-size 100
+
       - name: Commit refreshed generated data
         if: github.event_name != 'push' && steps.refresh.outcome == 'success'
         run: |
@@ -88,6 +101,8 @@ jobs:
           cp webapp/data/market_universe.json "$tmp_dir/market_universe.json"
           cp webapp/data/research_profiles.js "$tmp_dir/research_profiles.js"
           cp webapp/data/research_profiles.json "$tmp_dir/research_profiles.json"
+          cp webapp/data/max_bot_state.js "$tmp_dir/max_bot_state.js"
+          cp webapp/data/max_bot_state.json "$tmp_dir/max_bot_state.json"
           if [ -d webapp/data/history ]; then
             cp -R webapp/data/history "$tmp_dir/history"
           fi
@@ -99,6 +114,8 @@ jobs:
           cp "$tmp_dir/market_universe.json" webapp/data/market_universe.json
           cp "$tmp_dir/research_profiles.js" webapp/data/research_profiles.js
           cp "$tmp_dir/research_profiles.json" webapp/data/research_profiles.json
+          cp "$tmp_dir/max_bot_state.js" webapp/data/max_bot_state.js
+          cp "$tmp_dir/max_bot_state.json" webapp/data/max_bot_state.json
           rm -rf webapp/data/history
           if [ -d "$tmp_dir/history" ]; then
             cp -R "$tmp_dir/history" webapp/data/history
@@ -106,6 +123,7 @@ jobs:
 
           git add webapp/data/market_universe.js webapp/data/market_universe.json
           git add webapp/data/research_profiles.js webapp/data/research_profiles.json
+          git add webapp/data/max_bot_state.js webapp/data/max_bot_state.json
           git add webapp/data/history
           if git diff --cached --quiet; then
             echo "No generated data changes to commit."
