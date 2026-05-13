@@ -799,7 +799,7 @@ body::before {
 
 .opportunity-table {
   width: 100%;
-  min-width: 760px;
+  min-width: 700px;
   border-collapse: collapse;
 }
 
@@ -974,10 +974,23 @@ html:not([data-theme="dark"]) .opportunity-table thead th {
   color: var(--warn);
 }
 
+.opportunity-table__decision-summary {
+  display: grid;
+  gap: 8px;
+  min-width: 310px;
+}
+
+.opportunity-table__decision-topline {
+  display: grid;
+  grid-template-columns: auto minmax(130px, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
 .opportunity-table__conviction {
   display: grid;
-  gap: 7px;
-  min-width: 150px;
+  gap: 6px;
+  min-width: 130px;
 }
 
 .opportunity-table__conviction strong {

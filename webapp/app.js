@@ -3249,24 +3249,17 @@ function renderOpportunityTable() {
           </div>
         </td>
         <td>
-          <div class="opportunity-table__cell">
-            <span class="opportunity-table__decision opportunity-table__decision--${johnView.verdict.toLowerCase()}">${johnView.verdict}</span>
-            <small>John score ${johnView.score}/100</small>
-          </div>
-        </td>
-        <td>
-          <div class="opportunity-table__cell">
-            <span class="opportunity-table__decision opportunity-table__decision--${maxView.verdict.toLowerCase()}">${maxView.verdict}</span>
-            <small>Max score ${maxView.score}/100</small>
-          </div>
-        </td>
-        <td>
-          <div class="opportunity-table__cell opportunity-table__conviction">
-            <strong>${decision.conviction}%</strong>
-            <div class="opportunity-table__conviction-track">
-              <i class="opportunity-table__conviction-fill" style="width:${decision.conviction}%"></i>
+          <div class="opportunity-table__decision-summary">
+            <div class="opportunity-table__decision-topline">
+              <span class="opportunity-table__decision opportunity-table__decision--${decision.finalCall.toLowerCase()}">${decision.finalCall}</span>
+              <div class="opportunity-table__conviction">
+                <strong>${decision.conviction}%</strong>
+                <div class="opportunity-table__conviction-track">
+                  <i class="opportunity-table__conviction-fill" style="width:${decision.conviction}%"></i>
+                </div>
+              </div>
             </div>
-            <small>Final call: ${decision.finalCall}</small>
+            <small>John: ${johnView.verdict} (${johnView.score}/100) | Max: ${maxView.verdict} (${maxView.score}/100)</small>
           </div>
         </td>
       `;
