@@ -2535,7 +2535,11 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
   const intervalMeta = getSelectedMaxExecutionInterval();
   const rangeMeta = getSelectedMaxExecutionRange();
   const isIntradayInterval = ["1min", "15min", "4hour"].includes(intervalMeta?.id);
-  const usesFmpHistory = isIntradayInterval;
+  const isDailyCandleRequest =
+    currentMaxExecutionChartTypeId === "candles" &&
+    ["1d", "1w", "1mo"].includes(intervalMeta?.id) &&
+    hasFmpLiveSource();
+  const usesFmpHistory = isIntradayInterval || isDailyCandleRequest;
   renderMaxExecutionRangeSwitcher();
   renderMaxExecutionChartTypeSwitcher();
   renderMaxExecutionIntervalSwitcher();
@@ -2653,9 +2657,9 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
   if (!history) {
     const missingMessage =
       usesFmpHistory && !hasFmpLiveSource()
-        ? "Connect an FMP key to use 1m, 15m, or 4h intraday history. Daily, weekly, and monthly modes use cached 10-year history."
+        ? "Connect an FMP key to use intraday candles or daily OHLC candles. Line mode can still use cached 10-year history."
         : usesFmpHistory
-          ? "FMP did not return enough intraday bars for this ticker/range yet. Try a wider range or check the FMP key/proxy."
+          ? "FMP did not return enough OHLC bars for this ticker/range yet. Try a wider range or check the FMP key/proxy."
           : "No cached 10-year daily history chunk is available for this ticker yet. Re-run the market refresh to publish it.";
     maxExecutionChartHost.replaceChildren(
       makeMaxExecutionPlaceholder(missingMessage),
@@ -2666,11 +2670,9 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
 
   const historyData = getMaxExecutionHistoryData(history);
   if (currentMaxExecutionChartTypeId === "candles" && !historyData.hasCandles) {
-    maxExecutionChartHost.replaceChildren(
-      makeMaxExecutionPlaceholder("Candles need OHLC history. Re-run the 10-year market refresh or switch this chart back to Line."),
-    );
-    scheduleMaxLiveRefresh(company);
-    return;
+    currentMaxExecutionChartTypeId = "line";
+    window.localStorage.setItem("golden-pocket-max-chart-type", "line");
+    renderMaxExecutionChartTypeSwitcher();
   }
   if (historyData.data.length < 2) {
     maxExecutionChartHost.replaceChildren(
