@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golden Pocket Market Explorer - Working Draft</title>
-    <link rel="stylesheet" href="./styles.css?v=20260513-paperbot-fast-hydrate" />
+    <link rel="stylesheet" href="./styles.css?v=20260514-remove-target-trigger" />
   </head>
   <body class="workbench-page">
     <div class="app-shell">
@@ -334,62 +334,6 @@
             </div>
             <div class="tradingview-chart-shell" id="tradingview-chart-host" aria-live="polite"></div>
           </section>
-
-          <section class="panel reveal lens-bar" data-layout-id="6" data-layout-label="Target Model Buttons">
-            <div class="lens-bar__inner">
-              <p class="eyebrow">Price Target Model</p>
-              <div class="method-switcher" id="method-switcher" aria-label="Target method switcher"></div>
-            </div>
-          </section>
-
-        <section class="panel reveal" data-layout-id="11" data-layout-label="Trigger Lab">
-          <div class="section-heading">
-            <p class="eyebrow">Trigger Lab</p>
-            <h2>Turn the thesis into an entry decision</h2>
-          </div>
-          <div class="trigger-layout">
-            <form class="trigger-form" id="trigger-form">
-              <label class="toggle">
-                <input type="checkbox" data-points="25" checked />
-                <span>
-                  <strong>Rates are stable or easing</strong>
-                  <small>Use this when the 10-year is flat to lower, not breaking higher.</small>
-                </span>
-              </label>
-              <label class="toggle">
-                <input type="checkbox" data-points="30" checked />
-                <span>
-                  <strong>Price is consolidating, not vertical</strong>
-                  <small>Prefer a 3-7 day base or controlled pullback into support.</small>
-                </span>
-              </label>
-              <label class="toggle">
-                <input type="checkbox" data-points="30" checked />
-                <span>
-                  <strong>Earnings momentum still confirms</strong>
-                  <small>Next read should preserve occupancy, NOI, and FFO guidance strength.</small>
-                </span>
-              </label>
-              <label class="toggle">
-                <input type="checkbox" data-points="15" />
-                <span>
-                  <strong>Broad industry breadth is improving</strong>
-                  <small>Helpful extra confirmation if the whole sleeve is participating rather than only a few leaders.</small>
-                </span>
-              </label>
-            </form>
-
-            <article class="trigger-output panel panel--inset">
-              <p class="eyebrow">Readiness</p>
-              <div class="readiness-meter">
-                <div class="readiness-meter__fill" id="readiness-fill"></div>
-              </div>
-              <h3 id="readiness-label"></h3>
-              <p id="readiness-body"></p>
-              <div class="readiness-badges" id="readiness-badges"></div>
-            </article>
-          </div>
-        </section>
 
         <section class="panel panel--sources reveal" data-layout-id="13" data-layout-label="Sources">
           <div class="section-heading">

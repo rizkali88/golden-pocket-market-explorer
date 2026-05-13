@@ -6004,6 +6004,9 @@ function refreshExplorer() {
 }
 
 function updateReadiness() {
+  if (!triggerForm) {
+    return;
+  }
   const inputs = [...triggerForm.querySelectorAll("input[type='checkbox']")];
   const total = inputs.reduce(
     (sum, input) => sum + (input.checked ? Number(input.dataset.points) : 0),
@@ -6119,9 +6122,11 @@ if (scenarioSwitcher) {
   );
 }
 
-methodSwitcher.replaceChildren(
-  ...targetMethods.map((method) => makeButton(method, "method-pill", renderTargetMethod)),
-);
+if (methodSwitcher) {
+  methodSwitcher.replaceChildren(
+    ...targetMethods.map((method) => makeButton(method, "method-pill", renderTargetMethod)),
+  );
+}
 
 sectorFilter.addEventListener("change", (event) => {
   currentFilters.sector = event.target.value;
@@ -6241,7 +6246,9 @@ if (paperBotReset) {
 
 clearFiltersButton.addEventListener("click", resetFilters);
 
-triggerForm.addEventListener("input", updateReadiness);
+if (triggerForm) {
+  triggerForm.addEventListener("input", updateReadiness);
+}
 layoutToggle.addEventListener("click", () => {
   const isEnabled = document.body.classList.contains("layout-mode");
   applyLayoutMode(!isEnabled);
