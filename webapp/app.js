@@ -1074,7 +1074,7 @@ const currentFilters = {
   tickerOptionSearch: "",
   search: "",
   researchReadyOnly: false,
-  finalCall: "all",
+  finalCall: "Buy",
   finalCallSort: "none",
 };
 let layoutModeResetTimer = null;
@@ -1092,7 +1092,10 @@ const loadedHistoryChunks = new Set();
 const loadingHistoryChunks = new Map();
 const fmpHistoryCache = new Map();
 const fmpQuoteCache = new Map();
+const paperBotMarkPriceCache = new Map();
 let maxExecutionLiveTimer = null;
+let paperBotLiveTimer = null;
+let paperBotLiveRefreshInFlight = false;
 
 const maxExecutionLiveConfig = {
   provider: "fmp",
@@ -1631,6 +1634,7 @@ function setMaxLiveEnabled(enabled) {
   maxExecutionLiveEnabled = enabled;
   window.localStorage.setItem(FMP_LIVE_ENABLED_STORAGE_KEY, enabled ? "on" : "off");
   renderMaxLiveStatus();
+  schedulePaperBotLiveRefresh({ immediate: true });
 }
 
 function renderMaxLiveStatus(status = {}) {
@@ -1679,8 +1683,10 @@ function connectLocalFmpKey() {
     window.localStorage.removeItem(FMP_LOCAL_KEY_STORAGE_KEY);
     fmpHistoryCache.clear();
     fmpQuoteCache.clear();
+    paperBotMarkPriceCache.clear();
     renderMaxLiveStatus();
     renderMaxExecutionChart(companyUniverseById.get(currentCompanyId));
+    schedulePaperBotLiveRefresh();
     return;
   }
   if (normalizedKey !== "saved") {
@@ -1689,7 +1695,9 @@ function connectLocalFmpKey() {
   setMaxLiveEnabled(true);
   fmpHistoryCache.clear();
   fmpQuoteCache.clear();
+  paperBotMarkPriceCache.clear();
   renderMaxExecutionChart(companyUniverseById.get(currentCompanyId));
+  schedulePaperBotLiveRefresh({ immediate: true });
 }
 
 function buildFmpRequestUrl(kind, params = {}) {
@@ -1871,7 +1879,7 @@ async function fetchFmpQuote(company) {
   if (!company?.ticker || !hasFmpLiveSource()) {
     return null;
   }
-  const cacheKey = company.ticker;
+  const cacheKey = String(company.ticker).toUpperCase();
   const cached = fmpQuoteCache.get(cacheKey);
   if (cached && Date.now() - cached.fetchedAt < getLivePollSeconds() * 1000) {
     return cached;
@@ -2575,15 +2583,17 @@ async function updateMaxExecutionLiveTick(company) {
     return;
   }
   try {
-    fmpQuoteCache.delete(company.ticker);
+    fmpQuoteCache.delete(getPaperBotTicker(company));
     const liveQuote = await fetchFmpQuote(company);
     if (!liveQuote) {
       renderMaxLiveStatus({ error: true });
       return;
     }
+    paperBotMarkPriceCache.set(getPaperBotTicker(company), liveQuote);
     if (!applyLiveQuoteToCurrentMaxChart(company, liveQuote)) {
       renderMaxExecutionChart(companyUniverseById.get(currentCompanyId));
     }
+    renderPaperBotPanelForCurrentSelection();
   } catch (error) {
     renderMaxLiveStatus({ error: true });
   }
@@ -3934,26 +3944,30 @@ function renderHero(filteredUniverse) {
   const filteredDirectoryOnly = filteredUniverse.filter(
     (company) => company.profileMode === "directory_only",
   ).length;
+  const finalCallLabel = currentFilters.finalCall === "all" ? "" : `${currentFilters.finalCall} `;
   if (currentFilters.industry !== "All Industries") {
     if (heroTitle) {
       heroTitle.textContent = currentFilters.industry;
     }
     if (rosterTitle) {
-      rosterTitle.textContent = `${currentFilters.industry} opportunity table`;
+      rosterTitle.textContent = `${currentFilters.industry} ${finalCallLabel}opportunity table`;
     }
   } else if (currentFilters.sector !== "All Sectors") {
     if (heroTitle) {
       heroTitle.textContent = `${currentFilters.sector} Opportunity Report`;
     }
     if (rosterTitle) {
-      rosterTitle.textContent = `${currentFilters.sector} opportunity table`;
+      rosterTitle.textContent = `${currentFilters.sector} ${finalCallLabel}opportunity table`;
     }
   } else {
     if (heroTitle) {
       heroTitle.textContent = "SEC Market Universe";
     }
     if (rosterTitle) {
-      rosterTitle.textContent = "Scan the filtered ticker universe";
+      rosterTitle.textContent =
+        currentFilters.finalCall === "all"
+          ? "Scan the filtered ticker universe"
+          : `${currentFilters.finalCall} candidates across the market`;
     }
   }
 
@@ -3972,7 +3986,9 @@ function renderHero(filteredUniverse) {
   const visibleCount = Math.min(filteredCount, MAX_TABLE_RESULTS);
   if (rosterNote) {
     rosterNote.textContent =
-      filteredCount > MAX_TABLE_RESULTS
+      currentFilters.finalCall !== "all"
+        ? `Showing companies whose combined Trading Decision is ${currentFilters.finalCall}. Change the Final Call filter to inspect Watch, Wait, Avoid, or all calls.`
+        : filteredCount > MAX_TABLE_RESULTS
         ? `Showing the top ${visibleCount} of ${filteredCount} matching tickers by setup score. Narrow with sector, industry, or search for a tighter working list.`
         : currentFilters.researchReadyOnly
           ? `Only research-ready tickers with live scenario predictions are showing in this working list.`
@@ -4971,18 +4987,52 @@ function formatPaperBotTime(value) {
   });
 }
 
+function getPaperBotTicker(positionOrTicker) {
+  return String(positionOrTicker?.ticker ?? positionOrTicker ?? "").toUpperCase();
+}
+
+function getPaperBotCachedMark(ticker) {
+  const normalizedTicker = getPaperBotTicker(ticker);
+  const paperMark = paperBotMarkPriceCache.get(normalizedTicker);
+  if (paperMark?.price) {
+    return paperMark;
+  }
+  const fmpMark = fmpQuoteCache.get(normalizedTicker);
+  return fmpMark?.price ? fmpMark : null;
+}
+
 function getPaperBotMarkPrice(position, selectedCompany = null) {
+  const ticker = getPaperBotTicker(position);
+  const liveMark = getPaperBotCachedMark(ticker);
+  if (liveMark?.price) {
+    return Number(liveMark.price);
+  }
   if (
-    selectedCompany?.ticker === position.ticker &&
+    getPaperBotTicker(selectedCompany) === ticker &&
     hasValue(selectedCompany.price)
   ) {
     return Number(selectedCompany.price);
   }
-  const company = companyUniverseByTicker.get(String(position.ticker).toUpperCase());
+  const company = companyUniverseByTicker.get(ticker);
   if (hasValue(company?.price)) {
     return Number(company.price);
   }
   return Number(position.lastPrice ?? position.entryPrice ?? 0);
+}
+
+function getPaperBotMarkMeta(position, selectedCompany = null) {
+  const ticker = getPaperBotTicker(position);
+  const liveMark = getPaperBotCachedMark(ticker);
+  if (liveMark?.fetchedAt) {
+    return `FMP ${new Date(liveMark.fetchedAt).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    })}`;
+  }
+  if (getPaperBotTicker(selectedCompany) === ticker && hasValue(selectedCompany.price)) {
+    return "selected price";
+  }
+  return "cached mark";
 }
 
 function getPaperBotSnapshot(selectedCompany = null) {
@@ -4999,6 +5049,7 @@ function getPaperBotSnapshot(selectedCompany = null) {
       marketValue,
       costBasis,
       unrealizedPnl: marketValue - costBasis,
+      markMeta: getPaperBotMarkMeta(position, selectedCompany),
     };
   });
   const openValue = markedPositions.reduce((sum, position) => sum + position.marketValue, 0);
@@ -5258,11 +5309,142 @@ function evaluatePaperBotForSelection(company, johnView, maxView, decision, opti
   const plan = calculatePaperBotPlan(company, johnView, maxView, decision);
   const shouldExecute = options.execute === true;
   if (shouldExecute) {
-    return executePaperBotPlan(company, johnView, maxView, decision, plan);
+    const executedPlan = executePaperBotPlan(company, johnView, maxView, decision, plan);
+    schedulePaperBotLiveRefresh();
+    return executedPlan;
   }
   storePaperBotEvaluation(company, plan);
   savePaperBotState();
+  schedulePaperBotLiveRefresh();
   return plan;
+}
+
+function getPaperBotDecisionContext(company = companyUniverseById.get(currentCompanyId), options = {}) {
+  if (!company) {
+    return null;
+  }
+  const liveMark = getPaperBotCachedMark(company.ticker);
+  const contextCompany = liveMark?.price
+    ? {
+        ...company,
+        price: liveMark.price,
+        date: `FMP live quote ${new Date(liveMark.fetchedAt).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}`,
+      }
+    : company;
+  const opportunity = getOpportunityProfile(contextCompany);
+  const resolved = opportunity.resolved;
+  const johnView = buildJohnView(contextCompany, opportunity, resolved, {
+    includeDetails: options.includeDetails === true,
+  });
+  const maxView = buildMaxView(contextCompany, opportunity, resolved, {
+    includeDetails: options.includeDetails === true,
+  });
+  const decision = combineTradingDecision(johnView, maxView);
+  return { company: contextCompany, opportunity, resolved, johnView, maxView, decision };
+}
+
+function renderPaperBotPanelForCurrentSelection(plan = null) {
+  const context = getPaperBotDecisionContext();
+  if (!context) {
+    renderPaperBotPanel();
+    return;
+  }
+  renderPaperBotPanel(
+    context.company,
+    context.johnView,
+    context.maxView,
+    context.decision,
+    plan,
+  );
+}
+
+async function refreshPaperBotLiveMarks(options = {}) {
+  if (paperBotLiveRefreshInFlight) {
+    return;
+  }
+  const positions = Object.values(paperBotState.positions ?? {});
+  if (!positions.length || !hasFmpLiveSource()) {
+    renderPaperBotPanelForCurrentSelection();
+    return;
+  }
+
+  paperBotLiveRefreshInFlight = true;
+  try {
+    for (const position of positions) {
+      const ticker = getPaperBotTicker(position);
+      const company = companyUniverseByTicker.get(ticker);
+      if (!company) {
+        continue;
+      }
+      fmpQuoteCache.delete(ticker);
+      const quote = await fetchFmpQuote(company);
+      if (!quote?.price) {
+        continue;
+      }
+      paperBotMarkPriceCache.set(ticker, quote);
+      if (!paperBotState.positions[ticker]) {
+        continue;
+      }
+      paperBotState.positions[ticker].lastPrice = quote.price;
+
+      if (options.execute === true && paperBotState.autoEnabled) {
+        const markedCompany = {
+          ...company,
+          price: quote.price,
+          date: `FMP live quote ${new Date(quote.fetchedAt).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}`,
+        };
+        const context = getPaperBotDecisionContext(markedCompany);
+        if (context) {
+          const plan = calculatePaperBotPlan(
+            markedCompany,
+            context.johnView,
+            context.maxView,
+            context.decision,
+          );
+          if (plan.action === "SELL") {
+            executePaperBotPlan(
+              markedCompany,
+              context.johnView,
+              context.maxView,
+              context.decision,
+              plan,
+            );
+          }
+        }
+      }
+    }
+    savePaperBotState();
+    renderPaperBotPanelForCurrentSelection();
+    if (Object.keys(paperBotState.positions ?? {}).length === 0 && paperBotLiveTimer) {
+      window.clearInterval(paperBotLiveTimer);
+      paperBotLiveTimer = null;
+    }
+  } finally {
+    paperBotLiveRefreshInFlight = false;
+  }
+}
+
+function schedulePaperBotLiveRefresh(options = {}) {
+  if (paperBotLiveTimer) {
+    window.clearInterval(paperBotLiveTimer);
+    paperBotLiveTimer = null;
+  }
+  const hasOpenPositions = Object.keys(paperBotState.positions ?? {}).length > 0;
+  if (!hasOpenPositions || !hasFmpLiveSource()) {
+    return;
+  }
+  if (options.immediate) {
+    refreshPaperBotLiveMarks({ execute: paperBotState.autoEnabled });
+  }
+  paperBotLiveTimer = window.setInterval(() => {
+    refreshPaperBotLiveMarks({ execute: paperBotState.autoEnabled });
+  }, getLivePollSeconds() * 1000);
 }
 
 function makePaperBotMetric(label, value, tone = "") {
@@ -5335,7 +5517,7 @@ function renderPaperBotPanel(company = null, johnView = null, maxView = null, de
               <td><strong>${position.ticker}</strong><small>${position.name ?? ""}</small></td>
               <td>${formatNumber(position.shares, 4)}</td>
               <td>${formatMoney(position.entryPrice)}</td>
-              <td>${formatMoney(position.markPrice)}</td>
+              <td>${formatMoney(position.markPrice)}<small>${position.markMeta}</small></td>
               <td data-tone="${pnlTone}">${formatSignedMoney(position.unrealizedPnl)}</td>
             `;
             return row;
@@ -5370,7 +5552,9 @@ function renderPaperBotPanel(company = null, johnView = null, maxView = null, de
 
 function resetPaperBot() {
   paperBotState = createDefaultPaperBotState();
+  paperBotMarkPriceCache.clear();
   savePaperBotState();
+  schedulePaperBotLiveRefresh();
   const company = companyUniverseById.get(currentCompanyId);
   if (!company) {
     renderPaperBotPanel();
@@ -5921,7 +6105,7 @@ function resetFilters() {
   currentFilters.tickerOptionSearch = "";
   currentFilters.search = "";
   currentFilters.researchReadyOnly = false;
-  currentFilters.finalCall = "all";
+  currentFilters.finalCall = "Buy";
   currentFilters.finalCallSort = "none";
   setTickerMenuOpen(false);
   refreshExplorer();

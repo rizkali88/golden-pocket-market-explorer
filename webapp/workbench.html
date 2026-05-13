@@ -67,7 +67,7 @@
               <span>Final Call</span>
               <select id="final-call-filter" aria-label="Final call filter">
                 <option value="all">All Calls</option>
-                <option value="Buy">Buy</option>
+                <option value="Buy" selected>Buy</option>
                 <option value="Watch">Watch</option>
                 <option value="Wait">Wait</option>
                 <option value="Avoid">Avoid</option>
@@ -98,6 +98,80 @@
 
       <div class="report-shell">
         <main class="dashboard">
+          <section class="panel reveal paper-bot-panel" id="paper-bot-panel" data-layout-id="5.7" data-layout-label="Paper Trading Bot">
+            <div class="paper-bot-panel__header">
+              <div>
+                <p class="eyebrow">Paper Trading Bot</p>
+                <h2>$10,000 dummy account following Fundamental + Technical</h2>
+                <p class="paper-bot-panel__note">
+                  Local simulation only. The bot reads the current Trading Decision, sizes a spot position, and records paper activity in this browser.
+                </p>
+              </div>
+              <div class="paper-bot-actions" aria-label="Paper bot controls">
+                <button type="button" class="paper-bot-button" id="paper-bot-auto-toggle" aria-pressed="true">Auto paper: On</button>
+                <button type="button" class="paper-bot-button" id="paper-bot-evaluate">Evaluate ticker</button>
+                <button type="button" class="paper-bot-button paper-bot-button--ghost" id="paper-bot-reset">Reset $10k</button>
+              </div>
+            </div>
+
+            <div class="paper-bot-overview">
+              <article class="paper-bot-card paper-bot-card--account">
+                <span>Account equity</span>
+                <strong id="paper-bot-equity">$10,000.00</strong>
+                <small id="paper-bot-return">0.00% total return</small>
+                <div class="paper-bot-metrics" id="paper-bot-metrics"></div>
+              </article>
+              <article class="paper-bot-card paper-bot-card--instruction">
+                <span>Current instruction</span>
+                <strong id="paper-bot-instruction">Awaiting ticker</strong>
+                <small id="paper-bot-reason">Select a ticker to let the paper bot read the combined decision.</small>
+              </article>
+            </div>
+
+            <div class="paper-bot-data-grid">
+              <article class="paper-bot-table-card">
+                <div class="paper-bot-table-card__header">
+                  <span>Open paper positions</span>
+                  <small id="paper-bot-position-count">0 open</small>
+                </div>
+                <div class="paper-bot-table-wrap">
+                  <table class="paper-bot-table">
+                    <thead>
+                      <tr>
+                        <th>Ticker</th>
+                        <th>Shares</th>
+                        <th>Entry</th>
+                        <th>Mark</th>
+                        <th>P/L</th>
+                      </tr>
+                    </thead>
+                    <tbody id="paper-bot-positions"></tbody>
+                  </table>
+                </div>
+              </article>
+              <article class="paper-bot-table-card">
+                <div class="paper-bot-table-card__header">
+                  <span>Bot activity</span>
+                  <small id="paper-bot-activity-count">No trades yet</small>
+                </div>
+                <div class="paper-bot-table-wrap">
+                  <table class="paper-bot-table">
+                    <thead>
+                      <tr>
+                        <th>Time</th>
+                        <th>Action</th>
+                        <th>Ticker</th>
+                        <th>Value</th>
+                        <th>Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody id="paper-bot-activity"></tbody>
+                  </table>
+                </div>
+              </article>
+            </div>
+          </section>
+
           <section class="panel reveal page-clone-notice" aria-label="Working draft notice">
             <p class="eyebrow">Sandbox Page</p>
             <h1>Working draft copy</h1>
@@ -110,6 +184,14 @@
 
           <div class="market-workspace">
             <section class="panel reveal opportunity-panel" data-layout-id="7" data-layout-label="Opportunity Table">
+              <div class="opportunity-panel__header">
+                <div>
+                  <p class="eyebrow">Opportunity Table</p>
+                  <h2 id="roster-title">Buy candidates</h2>
+                  <p id="roster-note">Showing companies with a Buy final call by default.</p>
+                </div>
+                <strong class="opportunity-panel__count" id="company-count">Loading companies</strong>
+              </div>
               <div class="opportunity-table-wrap">
                 <table class="opportunity-table">
                   <thead>
@@ -128,64 +210,55 @@
               </div>
             </section>
 
-            <div class="chart-workspace-column">
-              <section class="panel reveal chart-panel" data-layout-id="8" data-layout-label="TradingView Chart">
-                <p class="chart-panel__subtitle" id="tradingview-chart-subtitle">
-                  Select a ticker from the table or toolbar to load the interactive TradingView chart.
-                </p>
-                <div class="tradingview-chart-shell" id="tradingview-chart-host" aria-live="polite"></div>
-              </section>
-
-              <section class="panel reveal max-execution-panel" data-layout-id="8.5" data-layout-label="Max Execution Chart">
-                <div class="max-execution-panel__header">
-                  <div>
-                    <p class="eyebrow">Max Execution Chart</p>
-                    <h2 id="max-execution-title">Select a ticker to map entry, stop, and targets</h2>
-                    <p id="max-execution-summary">
-                      Max will translate the Technical dashboard into an execution map once price and 52-week range inputs are available.
-                    </p>
+            <section class="panel reveal max-execution-panel" data-layout-id="8.5" data-layout-label="Max Execution Chart">
+              <div class="max-execution-panel__header">
+                <div>
+                  <p class="eyebrow">Max Execution Chart</p>
+                  <h2 id="max-execution-title">Select a ticker to map entry, stop, and targets</h2>
+                  <p id="max-execution-summary">
+                    Max will translate the Technical dashboard into an execution map once price and 52-week range inputs are available.
+                  </p>
+                </div>
+                <div class="max-execution-panel__tools">
+                  <span class="decision-badge" id="max-execution-verdict">Awaiting ticker</span>
+                  <div class="max-live-strip">
+                    <span class="max-live-status" id="max-live-status">Live off</span>
+                    <button class="max-live-action" id="max-live-toggle" type="button">Live feed</button>
+                    <button class="max-live-action" id="max-live-connect" type="button">FMP key</button>
                   </div>
-                  <div class="max-execution-panel__tools">
-                    <span class="decision-badge" id="max-execution-verdict">Awaiting ticker</span>
-                    <div class="max-live-strip">
-                      <span class="max-live-status" id="max-live-status">Live off</span>
-                      <button class="max-live-action" id="max-live-toggle" type="button">Live feed</button>
-                      <button class="max-live-action" id="max-live-connect" type="button">FMP key</button>
-                    </div>
-                    <div class="max-execution-control-group">
-                      <span>Chart</span>
-                      <div class="max-execution-range-switcher" id="max-execution-chart-type-switcher" aria-label="Max chart type"></div>
-                    </div>
-                    <div class="max-execution-control-group">
-                      <span>Range</span>
-                      <div class="max-execution-range-switcher" id="max-execution-range-switcher" aria-label="Max chart range"></div>
-                    </div>
-                    <div class="max-execution-control-group">
-                      <span>Interval</span>
-                      <div class="max-execution-range-switcher" id="max-execution-interval-switcher" aria-label="Max chart interval"></div>
-                    </div>
-                    <div class="max-execution-control-group max-execution-control-group--wide">
-                      <span>Drawings</span>
-                      <div class="max-execution-range-switcher" id="max-execution-drawing-switcher" aria-label="Max technical drawing overlays"></div>
-                    </div>
+                  <div class="max-execution-control-group">
+                    <span>Chart</span>
+                    <div class="max-execution-range-switcher" id="max-execution-chart-type-switcher" aria-label="Max chart type"></div>
+                  </div>
+                  <div class="max-execution-control-group">
+                    <span>Range</span>
+                    <div class="max-execution-range-switcher" id="max-execution-range-switcher" aria-label="Max chart range"></div>
+                  </div>
+                  <div class="max-execution-control-group">
+                    <span>Interval</span>
+                    <div class="max-execution-range-switcher" id="max-execution-interval-switcher" aria-label="Max chart interval"></div>
+                  </div>
+                  <div class="max-execution-control-group max-execution-control-group--wide">
+                    <span>Drawings</span>
+                    <div class="max-execution-range-switcher" id="max-execution-drawing-switcher" aria-label="Max technical drawing overlays"></div>
                   </div>
                 </div>
-                <div class="max-execution-layout">
-                  <div class="max-execution-chart-shell" id="max-execution-chart-host" aria-live="polite"></div>
-                  <aside class="max-execution-sidecar">
-                    <div class="max-execution-callout">
-                      <span>Setup Quality</span>
-                      <strong id="max-execution-score">--/100</strong>
-                      <small id="max-execution-position">Waiting for technical model</small>
-                    </div>
-                    <div class="max-execution-levels" id="max-execution-levels"></div>
-                  </aside>
-                </div>
-                <p class="chart-panel__note">
-                  Max overlays are generated from price, 52-week structure, Fibonacci retracements, Elliott-style impulse mapping, and ICT liquidity proxies. Daily, weekly, and monthly modes use cached 10-year history; 1m, 15m, and 4h intervals pull FMP data on demand for the selected ticker when live feed is connected. Live feed only updates the current bar.
-                </p>
-              </section>
-            </div>
+              </div>
+              <div class="max-execution-layout">
+                <div class="max-execution-chart-shell" id="max-execution-chart-host" aria-live="polite"></div>
+                <aside class="max-execution-sidecar">
+                  <div class="max-execution-callout">
+                    <span>Setup Quality</span>
+                    <strong id="max-execution-score">--/100</strong>
+                    <small id="max-execution-position">Waiting for technical model</small>
+                  </div>
+                  <div class="max-execution-levels" id="max-execution-levels"></div>
+                </aside>
+              </div>
+              <p class="chart-panel__note">
+                Max overlays are generated from price, 52-week structure, Fibonacci retracements, Elliott-style impulse mapping, and ICT liquidity proxies. Daily, weekly, and monthly modes use cached 10-year history; 1m, 15m, and 4h intervals pull FMP data on demand for the selected ticker when live feed is connected. Live feed only updates the current bar.
+              </p>
+            </section>
           </div>
 
           <section class="panel reveal agent-dashboard-panel" id="agent-dashboard-panel" data-layout-id="5.5" data-layout-label="Fundamental and Technical Dashboards">
@@ -269,78 +342,15 @@
             </article>
           </section>
 
-          <section class="panel reveal paper-bot-panel" id="paper-bot-panel" data-layout-id="5.7" data-layout-label="Paper Trading Bot">
-            <div class="paper-bot-panel__header">
-              <div>
-                <p class="eyebrow">Paper Trading Bot</p>
-                <h2>$10,000 dummy account following Fundamental + Technical</h2>
-                <p class="paper-bot-panel__note">
-                  Local simulation only. The bot reads the current Trading Decision, sizes a spot position, and records paper activity in this browser.
-                </p>
-              </div>
-              <div class="paper-bot-actions" aria-label="Paper bot controls">
-                <button type="button" class="paper-bot-button" id="paper-bot-auto-toggle" aria-pressed="true">Auto paper: On</button>
-                <button type="button" class="paper-bot-button" id="paper-bot-evaluate">Evaluate ticker</button>
-                <button type="button" class="paper-bot-button paper-bot-button--ghost" id="paper-bot-reset">Reset $10k</button>
-              </div>
+          <section class="panel reveal chart-panel chart-panel--wide" data-layout-id="8" data-layout-label="TradingView Chart">
+            <div class="section-heading section-heading--tight">
+              <p class="eyebrow">TradingView Chart</p>
+              <h2 id="tradingview-chart-title">Full-width market chart</h2>
+              <p class="chart-panel__subtitle" id="tradingview-chart-subtitle">
+                Select a ticker from the table or toolbar to load the interactive TradingView chart.
+              </p>
             </div>
-
-            <div class="paper-bot-overview">
-              <article class="paper-bot-card paper-bot-card--account">
-                <span>Account equity</span>
-                <strong id="paper-bot-equity">$10,000.00</strong>
-                <small id="paper-bot-return">0.00% total return</small>
-                <div class="paper-bot-metrics" id="paper-bot-metrics"></div>
-              </article>
-              <article class="paper-bot-card paper-bot-card--instruction">
-                <span>Current instruction</span>
-                <strong id="paper-bot-instruction">Awaiting ticker</strong>
-                <small id="paper-bot-reason">Select a ticker to let the paper bot read the combined decision.</small>
-              </article>
-            </div>
-
-            <div class="paper-bot-data-grid">
-              <article class="paper-bot-table-card">
-                <div class="paper-bot-table-card__header">
-                  <span>Open paper positions</span>
-                  <small id="paper-bot-position-count">0 open</small>
-                </div>
-                <div class="paper-bot-table-wrap">
-                  <table class="paper-bot-table">
-                    <thead>
-                      <tr>
-                        <th>Ticker</th>
-                        <th>Shares</th>
-                        <th>Entry</th>
-                        <th>Mark</th>
-                        <th>P/L</th>
-                      </tr>
-                    </thead>
-                    <tbody id="paper-bot-positions"></tbody>
-                  </table>
-                </div>
-              </article>
-              <article class="paper-bot-table-card">
-                <div class="paper-bot-table-card__header">
-                  <span>Bot activity</span>
-                  <small id="paper-bot-activity-count">No trades yet</small>
-                </div>
-                <div class="paper-bot-table-wrap">
-                  <table class="paper-bot-table">
-                    <thead>
-                      <tr>
-                        <th>Time</th>
-                        <th>Action</th>
-                        <th>Ticker</th>
-                        <th>Value</th>
-                        <th>Reason</th>
-                      </tr>
-                    </thead>
-                    <tbody id="paper-bot-activity"></tbody>
-                  </table>
-                </div>
-              </article>
-            </div>
+            <div class="tradingview-chart-shell" id="tradingview-chart-host" aria-live="polite"></div>
           </section>
 
           <section class="panel reveal lens-bar" data-layout-id="6" data-layout-label="Target Model Buttons">

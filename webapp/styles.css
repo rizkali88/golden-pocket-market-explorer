@@ -325,7 +325,7 @@ body::before {
 }
 
 .market-workspace .opportunity-panel,
-.market-workspace .chart-panel {
+.market-workspace .max-execution-panel {
   align-content: start;
 }
 
@@ -382,6 +382,16 @@ body::before {
 
 .chart-panel__note {
   font-size: 0.84rem;
+}
+
+.chart-panel--wide {
+  width: 100%;
+}
+
+.chart-panel--wide .tradingview-chart-shell,
+.chart-panel--wide .tradingview-chart-shell .tradingview-widget-container,
+.chart-panel--wide .tradingview-chart-placeholder {
+  min-height: 720px;
 }
 
 .tradingview-chart-shell {
@@ -472,6 +482,23 @@ body::before {
   grid-template-columns: minmax(0, 1.55fr) minmax(230px, 0.62fr);
   gap: 16px;
   align-items: stretch;
+}
+
+.market-workspace .max-execution-layout {
+  grid-template-columns: 1fr;
+}
+
+.market-workspace .max-execution-chart-shell,
+.market-workspace .max-execution-placeholder {
+  min-height: 520px;
+}
+
+.market-workspace .max-execution-sidecar {
+  grid-template-columns: 1fr;
+}
+
+.market-workspace .max-execution-levels {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .max-execution-control-group {
@@ -1484,6 +1511,28 @@ body::before {
   justify-content: space-between;
   gap: 18px;
   align-items: end;
+}
+
+.opportunity-panel__header h2 {
+  margin: 6px 0 6px;
+  color: var(--ink);
+  font-family: "Georgia", "Palatino Linotype", serif;
+  font-size: clamp(1.65rem, 3vw, 2.5rem);
+  line-height: 1;
+}
+
+.opportunity-panel__header p:not(.eyebrow) {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.opportunity-panel__count {
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.35;
+  text-align: right;
 }
 
 .opportunity-search {
