@@ -269,6 +269,80 @@
             </article>
           </section>
 
+          <section class="panel reveal paper-bot-panel" id="paper-bot-panel" data-layout-id="5.7" data-layout-label="Paper Trading Bot">
+            <div class="paper-bot-panel__header">
+              <div>
+                <p class="eyebrow">Paper Trading Bot</p>
+                <h2>$10,000 dummy account following Fundamental + Technical</h2>
+                <p class="paper-bot-panel__note">
+                  Local simulation only. The bot reads the current Trading Decision, sizes a spot position, and records paper activity in this browser.
+                </p>
+              </div>
+              <div class="paper-bot-actions" aria-label="Paper bot controls">
+                <button type="button" class="paper-bot-button" id="paper-bot-auto-toggle" aria-pressed="true">Auto paper: On</button>
+                <button type="button" class="paper-bot-button" id="paper-bot-evaluate">Evaluate ticker</button>
+                <button type="button" class="paper-bot-button paper-bot-button--ghost" id="paper-bot-reset">Reset $10k</button>
+              </div>
+            </div>
+
+            <div class="paper-bot-overview">
+              <article class="paper-bot-card paper-bot-card--account">
+                <span>Account equity</span>
+                <strong id="paper-bot-equity">$10,000.00</strong>
+                <small id="paper-bot-return">0.00% total return</small>
+                <div class="paper-bot-metrics" id="paper-bot-metrics"></div>
+              </article>
+              <article class="paper-bot-card paper-bot-card--instruction">
+                <span>Current instruction</span>
+                <strong id="paper-bot-instruction">Awaiting ticker</strong>
+                <small id="paper-bot-reason">Select a ticker to let the paper bot read the combined decision.</small>
+              </article>
+            </div>
+
+            <div class="paper-bot-data-grid">
+              <article class="paper-bot-table-card">
+                <div class="paper-bot-table-card__header">
+                  <span>Open paper positions</span>
+                  <small id="paper-bot-position-count">0 open</small>
+                </div>
+                <div class="paper-bot-table-wrap">
+                  <table class="paper-bot-table">
+                    <thead>
+                      <tr>
+                        <th>Ticker</th>
+                        <th>Shares</th>
+                        <th>Entry</th>
+                        <th>Mark</th>
+                        <th>P/L</th>
+                      </tr>
+                    </thead>
+                    <tbody id="paper-bot-positions"></tbody>
+                  </table>
+                </div>
+              </article>
+              <article class="paper-bot-table-card">
+                <div class="paper-bot-table-card__header">
+                  <span>Bot activity</span>
+                  <small id="paper-bot-activity-count">No trades yet</small>
+                </div>
+                <div class="paper-bot-table-wrap">
+                  <table class="paper-bot-table">
+                    <thead>
+                      <tr>
+                        <th>Time</th>
+                        <th>Action</th>
+                        <th>Ticker</th>
+                        <th>Value</th>
+                        <th>Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody id="paper-bot-activity"></tbody>
+                  </table>
+                </div>
+              </article>
+            </div>
+          </section>
+
           <section class="panel reveal lens-bar" data-layout-id="6" data-layout-label="Target Model Buttons">
             <div class="lens-bar__inner">
               <p class="eyebrow">Price Target Model</p>

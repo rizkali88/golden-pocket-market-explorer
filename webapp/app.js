@@ -743,6 +743,9 @@ function buildCompanyUniverse() {
 
 const companyUniverse = buildCompanyUniverse();
 const companyUniverseById = new Map(companyUniverse.map((company) => [company.id, company]));
+const companyUniverseByTicker = new Map(
+  companyUniverse.map((company) => [String(company.ticker).toUpperCase(), company]),
+);
 
 const targetMethods = [
   {
@@ -1033,6 +1036,18 @@ const maxExecutionChartTypeSwitcher = document.querySelector("#max-execution-cha
 const maxExecutionRangeSwitcher = document.querySelector("#max-execution-range-switcher");
 const maxExecutionIntervalSwitcher = document.querySelector("#max-execution-interval-switcher");
 const maxExecutionDrawingSwitcher = document.querySelector("#max-execution-drawing-switcher");
+const paperBotAutoToggle = document.querySelector("#paper-bot-auto-toggle");
+const paperBotEvaluate = document.querySelector("#paper-bot-evaluate");
+const paperBotReset = document.querySelector("#paper-bot-reset");
+const paperBotEquity = document.querySelector("#paper-bot-equity");
+const paperBotReturn = document.querySelector("#paper-bot-return");
+const paperBotMetrics = document.querySelector("#paper-bot-metrics");
+const paperBotInstruction = document.querySelector("#paper-bot-instruction");
+const paperBotReason = document.querySelector("#paper-bot-reason");
+const paperBotPositions = document.querySelector("#paper-bot-positions");
+const paperBotPositionCount = document.querySelector("#paper-bot-position-count");
+const paperBotActivity = document.querySelector("#paper-bot-activity");
+const paperBotActivityCount = document.querySelector("#paper-bot-activity-count");
 const layoutSections = [...document.querySelectorAll("[data-layout-id]")].sort(
   (left, right) => Number(left.dataset.layoutId) - Number(right.dataset.layoutId),
 );
@@ -1091,6 +1106,11 @@ const FMP_LOCAL_KEY_STORAGE_KEY = "golden-pocket-fmp-api-key";
 const FMP_LIVE_ENABLED_STORAGE_KEY = "golden-pocket-fmp-live-enabled";
 let maxExecutionLiveEnabled =
   window.localStorage.getItem(FMP_LIVE_ENABLED_STORAGE_KEY) === "on";
+const PAPER_BOT_STORAGE_KEY = "golden-pocket-paper-bot-v1";
+const PAPER_BOT_STARTING_CASH = 10000;
+const PAPER_BOT_MAX_POSITION_FRACTION = 0.2;
+const PAPER_BOT_RISK_FRACTION = 0.01;
+let paperBotState = loadPaperBotState();
 
 const MAX_EXECUTION_RANGES = [
   { id: "1d", label: "1D", days: 1 },
@@ -1963,6 +1983,264 @@ function findExtremePoint(data, getter, comparator) {
   }, null);
 }
 
+function getPointOpen(point) {
+  if (!point) {
+    return null;
+  }
+  const value = "open" in point ? point.open : getPointClose(point);
+  return Number.isFinite(Number(value)) ? Number(value) : null;
+}
+
+function getPointRange(point) {
+  const high = getPointHigh(point);
+  const low = getPointLow(point);
+  if (!Number.isFinite(high) || !Number.isFinite(low)) {
+    return 0;
+  }
+  return Math.max(high - low, 0);
+}
+
+function getPointPriceForPivot(point, type) {
+  return type === "high" ? getPointHigh(point) : getPointLow(point);
+}
+
+function findMaxExecutionPivots(data) {
+  if (!Array.isArray(data) || data.length < 5) {
+    return [];
+  }
+  const lookaround = clampNumber(Math.floor(data.length / 36), 2, 8);
+  const pivots = [];
+  for (let index = lookaround; index < data.length - lookaround; index += 1) {
+    const point = data[index];
+    const high = getPointHigh(point);
+    const low = getPointLow(point);
+    if (!Number.isFinite(high) || !Number.isFinite(low)) {
+      continue;
+    }
+    const windowSlice = data.slice(index - lookaround, index + lookaround + 1);
+    const isHigh = windowSlice.every((candidate) => high >= (getPointHigh(candidate) ?? -Infinity));
+    const isLow = windowSlice.every((candidate) => low <= (getPointLow(candidate) ?? Infinity));
+    if (isHigh) {
+      pivots.push({ type: "high", point, time: point.time, price: high });
+    }
+    if (isLow) {
+      pivots.push({ type: "low", point, time: point.time, price: low });
+    }
+  }
+  return pivots
+    .sort((left, right) => Number(left.time) - Number(right.time))
+    .filter((pivot, index, items) => {
+      const previous = items[index - 1];
+      return !previous || previous.time !== pivot.time || previous.type !== pivot.type;
+    });
+}
+
+function compressAlternatingPivots(pivots) {
+  return pivots.reduce((items, pivot) => {
+    const previous = items.at(-1);
+    if (!previous || previous.type !== pivot.type) {
+      items.push(pivot);
+      return items;
+    }
+    const pivotIsMoreExtreme =
+      pivot.type === "high" ? pivot.price >= previous.price : pivot.price <= previous.price;
+    if (pivotIsMoreExtreme) {
+      items[items.length - 1] = pivot;
+    }
+    return items;
+  }, []);
+}
+
+function getFallbackWavePoints(data) {
+  const ratios = [0.12, 0.3, 0.48, 0.66, 0.84];
+  return ratios
+    .map((ratio, index) => {
+      const point = getPointAtRatio(data, ratio);
+      if (!point?.time) {
+        return null;
+      }
+      return {
+        point,
+        time: point.time,
+        price: getPointClose(point) ?? 0,
+        type: index % 2 === 0 ? "high" : "low",
+      };
+    })
+    .filter(Boolean);
+}
+
+function findMaxExecutionFvg(data) {
+  if (!Array.isArray(data) || data.length < 3) {
+    return null;
+  }
+  const startIndex = Math.max(2, data.length - 120);
+  for (let index = data.length - 1; index >= startIndex; index -= 1) {
+    const leftHigh = getPointHigh(data[index - 2]);
+    const leftLow = getPointLow(data[index - 2]);
+    const currentHigh = getPointHigh(data[index]);
+    const currentLow = getPointLow(data[index]);
+    if (
+      Number.isFinite(leftHigh) &&
+      Number.isFinite(currentLow) &&
+      currentLow > leftHigh
+    ) {
+      return {
+        type: "bullish",
+        low: leftHigh,
+        high: currentLow,
+        time: data[index].time,
+      };
+    }
+    if (
+      Number.isFinite(leftLow) &&
+      Number.isFinite(currentHigh) &&
+      currentHigh < leftLow
+    ) {
+      return {
+        type: "bearish",
+        low: currentHigh,
+        high: leftLow,
+        time: data[index].time,
+      };
+    }
+  }
+  return null;
+}
+
+function buildMaxExecutionStructure(data, fallbackLevels) {
+  const cleanData = Array.isArray(data)
+    ? data.filter((point) => point?.time && Number.isFinite(getPointClose(point)))
+    : [];
+  if (cleanData.length < 3) {
+    return null;
+  }
+  const firstClose = getPointClose(cleanData.at(0)) ?? fallbackLevels?.price ?? 0;
+  const lastClose = getPointClose(cleanData.at(-1)) ?? firstClose;
+  const returnPct = firstClose > 0 ? ((lastClose - firstClose) / firstClose) * 100 : 0;
+  const trend =
+    returnPct >= 2
+      ? "up"
+      : returnPct <= -2
+        ? "down"
+        : lastClose >= firstClose
+          ? "neutral-up"
+          : "neutral-down";
+  const direction = trend.includes("down") ? "down" : "up";
+  const pivots = compressAlternatingPivots(findMaxExecutionPivots(cleanData));
+  const recentData = cleanData.slice(Math.max(0, cleanData.length - Math.min(120, cleanData.length)));
+  const highPoint = findExtremePoint(recentData, getPointHigh, (left, right) => left > right);
+  const lowPoint = findExtremePoint(recentData, getPointLow, (left, right) => left < right);
+  let anchorLow = lowPoint;
+  let anchorHigh = highPoint;
+
+  if (direction === "up") {
+    const highestPivot =
+      [...pivots].reverse().find((pivot) => pivot.type === "high") ??
+      (anchorHigh ? { point: anchorHigh, time: anchorHigh.time, price: getPointHigh(anchorHigh), type: "high" } : null);
+    const lowBeforeHigh =
+      highestPivot &&
+      [...pivots]
+        .reverse()
+        .find((pivot) => pivot.type === "low" && Number(pivot.time) < Number(highestPivot.time));
+    anchorHigh = highestPivot?.point ?? anchorHigh;
+    anchorLow = lowBeforeHigh?.point ?? anchorLow;
+  } else {
+    const lowestPivot =
+      [...pivots].reverse().find((pivot) => pivot.type === "low") ??
+      (anchorLow ? { point: anchorLow, time: anchorLow.time, price: getPointLow(anchorLow), type: "low" } : null);
+    const highBeforeLow =
+      lowestPivot &&
+      [...pivots]
+        .reverse()
+        .find((pivot) => pivot.type === "high" && Number(pivot.time) < Number(lowestPivot.time));
+    anchorLow = lowestPivot?.point ?? anchorLow;
+    anchorHigh = highBeforeLow?.point ?? anchorHigh;
+  }
+
+  const anchorLowPrice = getPointLow(anchorLow) ?? fallbackLevels?.low ?? Math.min(firstClose, lastClose);
+  const anchorHighPrice = getPointHigh(anchorHigh) ?? fallbackLevels?.high ?? Math.max(firstClose, lastClose);
+  const low = Math.min(anchorLowPrice, anchorHighPrice);
+  const high = Math.max(anchorLowPrice, anchorHighPrice);
+  const range = Math.max(high - low, Math.abs(lastClose) * 0.01, 0.01);
+  const fibSource = direction === "up" ? high : low;
+  const fibSign = direction === "up" ? -1 : 1;
+  const fibLevel = (ratio) => fibSource + fibSign * range * ratio;
+  const extensionSource = direction === "up" ? high : low;
+  const extensionSign = direction === "up" ? 1 : -1;
+  const fvg = findMaxExecutionFvg(cleanData);
+  const wavePoints = compressAlternatingPivots(pivots).slice(-5);
+
+  return {
+    trend,
+    direction,
+    firstClose,
+    lastClose,
+    returnPct,
+    highPoint,
+    lowPoint,
+    anchorLow,
+    anchorHigh,
+    low,
+    high,
+    range,
+    equilibrium: low + range * 0.5,
+    fvg,
+    wavePoints: wavePoints.length >= 3 ? wavePoints : getFallbackWavePoints(cleanData),
+    fibLevels: [
+      ["Fib 23.6", fibLevel(0.236)],
+      ["Fib 38.2", fibLevel(0.382)],
+      ["Fib 50.0", fibLevel(0.5)],
+      ["Fib 61.8", fibLevel(0.618)],
+      ["Fib 78.6", fibLevel(0.786)],
+      ["Fib 127.2", extensionSource + extensionSign * range * 0.272],
+      ["Fib 161.8", extensionSource + extensionSign * range * 0.618],
+    ],
+  };
+}
+
+function buildDynamicTradeLevels(baseLevels, structure) {
+  if (!baseLevels || !structure?.range) {
+    return baseLevels;
+  }
+  const price = baseLevels.price;
+  const { low, high, range, direction } = structure;
+  const bullish = direction === "up";
+  const entryLow = bullish ? high - range * 0.618 : low + range * 0.382;
+  const entryHigh = bullish ? high - range * 0.382 : low + range * 0.618;
+  const addLow = bullish ? high - range * 0.786 : low + range * 0.236;
+  const addHigh = bullish ? entryLow : entryLow;
+  const stop = Math.max(0.01, low - range * 0.08);
+  const target1 = bullish ? high : low + range * 0.786;
+  const target2 = bullish ? high + range * 0.272 : high;
+  const target3 = bullish ? high + range * 0.618 : high + range * 0.272;
+  const normalizedEntryLow = Math.min(entryLow, entryHigh);
+  const normalizedEntryHigh = Math.max(entryLow, entryHigh);
+  const entryMid = (normalizedEntryLow + normalizedEntryHigh) / 2;
+  const rewardRisk = (target2 - entryMid) / Math.max(entryMid - stop, price * 0.01);
+  const position =
+    price >= normalizedEntryLow && price <= normalizedEntryHigh
+      ? "Inside selected-frame entry zone"
+      : price > normalizedEntryHigh
+        ? "Above selected-frame entry"
+        : "Below selected-frame entry";
+
+  return {
+    ...baseLevels,
+    low,
+    high,
+    entryLow: normalizedEntryLow,
+    entryHigh: normalizedEntryHigh,
+    addLow: Math.min(addLow, addHigh),
+    addHigh: Math.max(addLow, addHigh),
+    stop,
+    target1,
+    target2,
+    target3,
+    rewardRisk,
+    position,
+  };
+}
+
 function buildBaseMaxExecutionMarkers(lastTime, levels, palette) {
   return [
     {
@@ -1989,24 +2267,23 @@ function buildBaseMaxExecutionMarkers(lastTime, levels, palette) {
   ];
 }
 
-function buildElliottWaveMarkers(data, palette) {
+function buildElliottWaveMarkers(data, palette, structure = null) {
   if (!currentMaxExecutionDrawingIds.has("elliott") || !Array.isArray(data) || data.length < 5) {
     return [];
   }
-  const ratios = [0.12, 0.3, 0.48, 0.66, 0.84];
-  const firstClose = getPointClose(data.at(0)) ?? 0;
-  const lastClose = getPointClose(data.at(-1)) ?? firstClose;
-  const bullish = lastClose >= firstClose;
+  const bullish = structure?.direction !== "down";
   const usedTimes = new Set();
+  const wavePoints =
+    structure?.wavePoints?.length >= 3 ? structure.wavePoints.slice(-5) : getFallbackWavePoints(data);
 
-  return ratios
-    .map((ratio, index) => {
-      const point = getPointAtRatio(data, ratio);
+  return wavePoints
+    .map((pivot, index) => {
+      const point = pivot.point ?? pivot;
       if (!point?.time || usedTimes.has(point.time)) {
         return null;
       }
       usedTimes.add(point.time);
-      const impulseWave = index % 2 === 0;
+      const impulseWave = bullish ? pivot.type !== "low" : pivot.type !== "high";
       return {
         time: point.time,
         position: bullish === impulseWave ? "aboveBar" : "belowBar",
@@ -2018,13 +2295,16 @@ function buildElliottWaveMarkers(data, palette) {
     .filter(Boolean);
 }
 
-function buildIctMarkers(data, levels, palette) {
+function buildIctMarkers(data, levels, palette, structure = null) {
   if (!currentMaxExecutionDrawingIds.has("ict") || !Array.isArray(data) || data.length < 3) {
     return [];
   }
   const lookbackData = data.slice(Math.max(0, data.length - 80));
-  const highPoint = findExtremePoint(lookbackData, getPointHigh, (left, right) => left > right);
-  const lowPoint = findExtremePoint(lookbackData, getPointLow, (left, right) => left < right);
+  const highPoint =
+    structure?.highPoint ?? findExtremePoint(lookbackData, getPointHigh, (left, right) => left > right);
+  const lowPoint =
+    structure?.lowPoint ?? findExtremePoint(lookbackData, getPointLow, (left, right) => left < right);
+  const fvg = structure?.fvg;
   const lastTime = data.at(-1)?.time;
   return [
     highPoint?.time
@@ -2045,6 +2325,15 @@ function buildIctMarkers(data, levels, palette) {
           text: "SSL",
         }
       : null,
+    fvg?.time
+      ? {
+          time: fvg.time,
+          position: fvg.type === "bullish" ? "belowBar" : "aboveBar",
+          color: palette.ict,
+          shape: "circle",
+          text: `${fvg.type === "bullish" ? "Bull" : "Bear"} FVG`,
+        }
+      : null,
     lastTime
       ? {
           time: lastTime,
@@ -2057,11 +2346,11 @@ function buildIctMarkers(data, levels, palette) {
   ].filter(Boolean);
 }
 
-function buildMaxExecutionMarkers(lastTime, levels, palette, data = []) {
+function buildMaxExecutionMarkers(lastTime, levels, palette, data = [], structure = null) {
   return [
     ...buildBaseMaxExecutionMarkers(lastTime, levels, palette),
-    ...buildElliottWaveMarkers(data, palette),
-    ...buildIctMarkers(data, levels, palette),
+    ...buildElliottWaveMarkers(data, palette, structure),
+    ...buildIctMarkers(data, levels, palette, structure),
   ].sort((left, right) => Number(left.time) - Number(right.time));
 }
 
@@ -2089,11 +2378,11 @@ function getLiveBucketTime(fetchedAt, intervalMeta) {
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) / 1000;
 }
 
-function setMaxExecutionMarkers(priceSeries, lastTime, levels, palette, data = []) {
+function setMaxExecutionMarkers(priceSeries, lastTime, levels, palette, data = [], structure = null) {
   if (!priceSeries || !lastTime) {
     return;
   }
-  priceSeries.setMarkers(buildMaxExecutionMarkers(lastTime, levels, palette, data));
+  priceSeries.setMarkers(buildMaxExecutionMarkers(lastTime, levels, palette, data, structure));
 }
 
 function createCurrentPriceLine(priceSeries, levels, palette) {
@@ -2122,29 +2411,41 @@ function createMaxExecutionPriceLine(priceSeries, { title, price, color, lineSty
   });
 }
 
-function createMaxExecutionDrawingPriceLines(priceSeries, levels, palette) {
+function createMaxExecutionDrawingPriceLines(priceSeries, levels, palette, structure = null) {
   const lineStyle = window.LightweightCharts.LineStyle;
-  const range = Math.max(levels.high - levels.low, levels.price * 0.08);
+  const range = Math.max((structure?.range ?? levels.high - levels.low), levels.price * 0.02);
   if (currentMaxExecutionDrawingIds.has("fib")) {
-    [
-      ["Fib 23.6", levels.low + range * 0.236, palette.fib, lineStyle.Dotted],
-      ["Fib 38.2", levels.low + range * 0.382, palette.entry, lineStyle.Dotted],
-      ["Fib 50.0", levels.low + range * 0.5, palette.fib, lineStyle.Dashed],
-      ["Fib 61.8", levels.low + range * 0.618, palette.entry, lineStyle.Dotted],
-      ["Fib 78.6", levels.low + range * 0.786, palette.fib, lineStyle.Dotted],
-      ["Fib 127.2", levels.high + range * 0.272, palette.target, lineStyle.Dashed],
-      ["Fib 161.8", levels.high + range * 0.618, palette.target, lineStyle.Dotted],
-    ].forEach(([title, price, color, style]) => {
+    const fibLevels =
+      structure?.fibLevels ??
+      [
+        ["Fib 23.6", levels.low + range * 0.236],
+        ["Fib 38.2", levels.low + range * 0.382],
+        ["Fib 50.0", levels.low + range * 0.5],
+        ["Fib 61.8", levels.low + range * 0.618],
+        ["Fib 78.6", levels.low + range * 0.786],
+        ["Fib 127.2", levels.high + range * 0.272],
+        ["Fib 161.8", levels.high + range * 0.618],
+      ];
+    fibLevels.forEach(([title, price]) => {
+      const color =
+        title.includes("127") || title.includes("161")
+          ? palette.target
+          : title.includes("38") || title.includes("61")
+            ? palette.entry
+            : palette.fib;
+      const style = title.includes("50") || title.includes("127") ? lineStyle.Dashed : lineStyle.Dotted;
       createMaxExecutionPriceLine(priceSeries, { title, price, color, lineStyle: style });
     });
   }
   if (currentMaxExecutionDrawingIds.has("ict")) {
+    const fvgLow = structure?.fvg?.low ?? levels.entryLow;
+    const fvgHigh = structure?.fvg?.high ?? levels.entryHigh;
     [
-      ["ICT SSL", levels.low, palette.liquidity, lineStyle.Dotted],
-      ["ICT EQ", levels.low + range * 0.5, palette.ict, lineStyle.Dashed],
-      ["ICT BSL", levels.high, palette.liquidity, lineStyle.Dotted],
-      ["ICT FVG Low", levels.entryLow, palette.ict, lineStyle.Dotted],
-      ["ICT FVG High", levels.entryHigh, palette.ict, lineStyle.Dotted],
+      ["ICT SSL", structure?.low ?? levels.low, palette.liquidity, lineStyle.Dotted],
+      ["ICT EQ", structure?.equilibrium ?? levels.low + range * 0.5, palette.ict, lineStyle.Dashed],
+      ["ICT BSL", structure?.high ?? levels.high, palette.liquidity, lineStyle.Dotted],
+      ["ICT FVG Low", fvgLow, palette.ict, lineStyle.Dotted],
+      ["ICT FVG High", fvgHigh, palette.ict, lineStyle.Dotted],
     ].forEach(([title, price, color, style]) => {
       createMaxExecutionPriceLine(priceSeries, { title, price, color, lineStyle: style });
     });
@@ -2252,15 +2553,19 @@ function applyLiveQuoteToCurrentMaxChart(company, liveQuote) {
     data.push(updatedPoint);
   }
 
+  const structure = buildMaxExecutionStructure(data, levels);
+  const chartLevels = buildDynamicTradeLevels(levels, structure);
+
   state.priceSeries.update(updatedPoint);
   if (state.currentPriceLine && state.priceSeries.removePriceLine) {
     state.priceSeries.removePriceLine(state.currentPriceLine);
   }
-  state.currentPriceLine = createCurrentPriceLine(state.priceSeries, levels, state.palette);
+  state.currentPriceLine = createCurrentPriceLine(state.priceSeries, chartLevels, state.palette);
   state.data = data;
-  state.levels = levels;
-  setMaxExecutionMarkers(state.priceSeries, updatedPoint.time, levels, state.palette, data);
-  updateMaxExecutionLiveText(chartCompany, maxView, levels, state.intervalMeta, liveQuote);
+  state.levels = chartLevels;
+  state.structure = structure;
+  setMaxExecutionMarkers(state.priceSeries, updatedPoint.time, chartLevels, state.palette, data, structure);
+  updateMaxExecutionLiveText(chartCompany, maxView, chartLevels, state.intervalMeta, liveQuote);
   renderMaxLiveStatus({ text: "FMP live" });
   return true;
 }
@@ -2682,6 +2987,26 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
     return;
   }
 
+  const structure = buildMaxExecutionStructure(historyData.data, levels);
+  const chartLevels = buildDynamicTradeLevels(levels, structure);
+  if (maxExecutionSummary) {
+    const frameLabel = `${rangeMeta.label} / ${intervalMeta.label}`;
+    const feedLabel =
+      liveQuote?.price && usesFmpHistory
+        ? `FMP ${intervalMeta.label} OHLC bars plus live quote`
+        : liveQuote?.price
+          ? "FMP live quote with cached 10-year daily history"
+          : usesFmpHistory
+            ? `FMP ${intervalMeta.label} OHLC bars`
+            : "cached 10-year daily history";
+    maxExecutionSummary.textContent =
+      `Technical call is ${maxView.verdict} with ${maxView.score}/100 conviction. Max is using ${feedLabel}; drawings and levels are recalculated from the selected ${frameLabel} frame. Current price is ${formatMoney(chartLevels.price)}, entry is near ${formatPriceRange(chartLevels.entryLow, chartLevels.entryHigh)}, stop is ${formatMoney(chartLevels.stop)}, and targets are ${formatMoney(chartLevels.target1)}, ${formatMoney(chartLevels.target2)}, then ${formatMoney(chartLevels.target3)}.`;
+  }
+  if (maxExecutionPosition) {
+    maxExecutionPosition.textContent = chartLevels.position;
+  }
+  renderMaxExecutionLevelCards(chartLevels);
+
   maxExecutionChartHost.replaceChildren();
   const palette = getMaxExecutionChartPalette();
   const chartHeight = Math.max(maxExecutionChartHost.clientHeight || 360, 300);
@@ -2731,22 +3056,22 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
   const dotted = window.LightweightCharts.LineStyle.Dotted;
   let currentPriceLine = null;
   [
-    ["SL", levels.stop, palette.stop, dashed],
-    ["Add Low", levels.addLow, palette.add, dotted],
-    ["Entry Low", levels.entryLow, palette.entry, dashed],
-    ["Entry High", levels.entryHigh, palette.entry, dashed],
-    ["TP1", levels.target1, palette.target, dashed],
-    ["TP2", levels.target2, palette.target, dashed],
-    ["TP3", levels.target3, palette.target, dotted],
+    ["SL", chartLevels.stop, palette.stop, dashed],
+    ["Add Low", chartLevels.addLow, palette.add, dotted],
+    ["Entry Low", chartLevels.entryLow, palette.entry, dashed],
+    ["Entry High", chartLevels.entryHigh, palette.entry, dashed],
+    ["TP1", chartLevels.target1, palette.target, dashed],
+    ["TP2", chartLevels.target2, palette.target, dashed],
+    ["TP3", chartLevels.target3, palette.target, dotted],
   ].forEach(([title, price, color, lineStyle]) => {
     createMaxExecutionPriceLine(priceSeries, { title, price, color, lineStyle });
   });
-  createMaxExecutionDrawingPriceLines(priceSeries, levels, palette);
-  currentPriceLine = createCurrentPriceLine(priceSeries, levels, palette);
+  createMaxExecutionDrawingPriceLines(priceSeries, chartLevels, palette, structure);
+  currentPriceLine = createCurrentPriceLine(priceSeries, chartLevels, palette);
 
   const lastTime = historyData.data.at(-1)?.time;
   if (lastTime) {
-    setMaxExecutionMarkers(priceSeries, lastTime, levels, palette, historyData.data);
+    setMaxExecutionMarkers(priceSeries, lastTime, chartLevels, palette, historyData.data, structure);
   }
   renderMaxExecutionDrawingLegend(maxExecutionChartHost);
 
@@ -2761,7 +3086,8 @@ async function renderMaxExecutionChart(company, opportunity = null, resolved = n
     intervalMeta,
     seriesType: historyData.type,
     data: historyData.data,
-    levels,
+    levels: chartLevels,
+    structure,
   };
   currentMaxExecutionResizeObserver = new ResizeObserver(([entry]) => {
     const width = Math.floor(entry.contentRect.width);
@@ -4580,6 +4906,483 @@ function combineTradingDecision(johnView, maxView) {
   return { finalCall, conviction };
 }
 
+function createDefaultPaperBotState() {
+  return {
+    cash: PAPER_BOT_STARTING_CASH,
+    realizedPnl: 0,
+    positions: {},
+    trades: [],
+    autoEnabled: true,
+    lastEvaluations: {},
+  };
+}
+
+function loadPaperBotState() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(PAPER_BOT_STORAGE_KEY) ?? "null");
+    if (!parsed || typeof parsed !== "object") {
+      return createDefaultPaperBotState();
+    }
+    const defaults = createDefaultPaperBotState();
+    return {
+      ...defaults,
+      ...parsed,
+      cash: Number.isFinite(Number(parsed.cash)) ? Number(parsed.cash) : defaults.cash,
+      realizedPnl: Number.isFinite(Number(parsed.realizedPnl)) ? Number(parsed.realizedPnl) : 0,
+      positions:
+        parsed.positions && typeof parsed.positions === "object" && !Array.isArray(parsed.positions)
+          ? parsed.positions
+          : {},
+      trades: Array.isArray(parsed.trades) ? parsed.trades.slice(-200) : [],
+      lastEvaluations:
+        parsed.lastEvaluations && typeof parsed.lastEvaluations === "object"
+          ? parsed.lastEvaluations
+          : {},
+      autoEnabled: parsed.autoEnabled !== false,
+    };
+  } catch (error) {
+    return createDefaultPaperBotState();
+  }
+}
+
+function savePaperBotState() {
+  window.localStorage.setItem(PAPER_BOT_STORAGE_KEY, JSON.stringify(paperBotState));
+}
+
+function formatSignedMoney(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return "--";
+  }
+  const prefix = numericValue > 0 ? "+" : numericValue < 0 ? "-" : "";
+  return `${prefix}${formatMoney(Math.abs(numericValue))}`;
+}
+
+function formatPaperBotTime(value) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "--";
+  }
+  return parsed.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function getPaperBotMarkPrice(position, selectedCompany = null) {
+  if (
+    selectedCompany?.ticker === position.ticker &&
+    hasValue(selectedCompany.price)
+  ) {
+    return Number(selectedCompany.price);
+  }
+  const company = companyUniverseByTicker.get(String(position.ticker).toUpperCase());
+  if (hasValue(company?.price)) {
+    return Number(company.price);
+  }
+  return Number(position.lastPrice ?? position.entryPrice ?? 0);
+}
+
+function getPaperBotSnapshot(selectedCompany = null) {
+  const positions = Object.values(paperBotState.positions ?? {});
+  const markedPositions = positions.map((position) => {
+    const markPrice = getPaperBotMarkPrice(position, selectedCompany);
+    const shares = Number(position.shares ?? 0);
+    const entryPrice = Number(position.entryPrice ?? markPrice);
+    const marketValue = shares * markPrice;
+    const costBasis = shares * entryPrice;
+    return {
+      ...position,
+      markPrice,
+      marketValue,
+      costBasis,
+      unrealizedPnl: marketValue - costBasis,
+    };
+  });
+  const openValue = markedPositions.reduce((sum, position) => sum + position.marketValue, 0);
+  const unrealizedPnl = markedPositions.reduce((sum, position) => sum + position.unrealizedPnl, 0);
+  const equity = Number(paperBotState.cash ?? 0) + openValue;
+  return {
+    cash: Number(paperBotState.cash ?? 0),
+    equity,
+    openValue,
+    unrealizedPnl,
+    realizedPnl: Number(paperBotState.realizedPnl ?? 0),
+    returnPct: ((equity - PAPER_BOT_STARTING_CASH) / PAPER_BOT_STARTING_CASH) * 100,
+    positions: markedPositions,
+  };
+}
+
+function getPaperBotActionTone(action) {
+  if (["BUY", "HOLD"].includes(action)) {
+    return "buy";
+  }
+  if (action === "SELL") {
+    return "sell";
+  }
+  return "wait";
+}
+
+function calculatePaperBotPlan(company, johnView, maxView, decision) {
+  if (!company || !johnView || !maxView || !decision) {
+    return {
+      action: "WAIT",
+      label: "Awaiting ticker",
+      reason: "Select a ticker to let the paper bot read Fundamental, Technical, and final conviction.",
+    };
+  }
+
+  const levels = maxView.levels;
+  const price = Number(levels?.price ?? company.price);
+  const ticker = company.ticker;
+  const position = paperBotState.positions?.[ticker] ?? null;
+  if (!levels || !Number.isFinite(price) || price <= 0) {
+    return {
+      action: "WAIT",
+      label: "No trade",
+      reason: `${ticker} is missing price or execution levels, so the paper bot will not size a trade.`,
+    };
+  }
+
+  if (position) {
+    if (price <= Number(position.stop ?? levels.stop)) {
+      return {
+        action: "SELL",
+        label: "Exit stop",
+        price,
+        shares: Number(position.shares),
+        value: Number(position.shares) * price,
+        reason: `Price touched the stop line near ${formatMoney(position.stop ?? levels.stop)}.`,
+        levels,
+      };
+    }
+    if (price >= Number(position.target2 ?? levels.target2)) {
+      return {
+        action: "SELL",
+        label: "Take profit",
+        price,
+        shares: Number(position.shares),
+        value: Number(position.shares) * price,
+        reason: `Price reached the TP2 objective near ${formatMoney(position.target2 ?? levels.target2)}.`,
+        levels,
+      };
+    }
+    if (decision.finalCall === "Avoid" || johnView.verdict === "Avoid" || maxView.verdict === "Avoid") {
+      return {
+        action: "SELL",
+        label: "Exit thesis",
+        price,
+        shares: Number(position.shares),
+        value: Number(position.shares) * price,
+        reason: "Either Fundamental or Technical moved to Avoid, so the paper bot exits the thesis.",
+        levels,
+      };
+    }
+    return {
+      action: "HOLD",
+      label: "Hold position",
+      price,
+      shares: Number(position.shares),
+      value: Number(position.shares) * price,
+      reason: `Position remains active. Stop ${formatMoney(levels.stop)}, TP2 ${formatMoney(levels.target2)}, final call ${decision.finalCall}.`,
+      levels,
+    };
+  }
+
+  if (decision.finalCall !== "Buy") {
+    return {
+      action: "WAIT",
+      label: "Stand aside",
+      price,
+      reason: `Final call is ${decision.finalCall}. The paper bot only opens fresh spot trades on Buy.`,
+      levels,
+    };
+  }
+  if (decision.conviction < 70) {
+    return {
+      action: "WAIT",
+      label: "Wait for conviction",
+      price,
+      reason: `Conviction is ${decision.conviction}/100. The bot requires at least 70/100 to open risk.`,
+      levels,
+    };
+  }
+  if (maxView.verdict !== "Enter") {
+    return {
+      action: "WAIT",
+      label: "Wait for setup",
+      price,
+      reason: `Technical says ${maxView.verdict}. The bot waits for Technical to confirm Enter.`,
+      levels,
+    };
+  }
+  if (price > levels.entryHigh * 1.015) {
+    return {
+      action: "WAIT",
+      label: "Chasing avoided",
+      price,
+      reason: `Price is above the preferred entry zone ${formatPriceRange(levels.entryLow, levels.entryHigh)}.`,
+      levels,
+    };
+  }
+
+  const snapshot = getPaperBotSnapshot(company);
+  const maxNotional = snapshot.equity * PAPER_BOT_MAX_POSITION_FRACTION;
+  const riskBudget = snapshot.equity * PAPER_BOT_RISK_FRACTION;
+  const riskPerShare = Math.max(price - levels.stop, price * 0.025);
+  const cashAvailable = Math.max(snapshot.cash, 0);
+  const rawShares = Math.min(maxNotional / price, riskBudget / riskPerShare, cashAvailable / price);
+  const shares = Math.floor(rawShares * 10000) / 10000;
+  const value = shares * price;
+  if (!Number.isFinite(shares) || shares <= 0 || value < 50) {
+    return {
+      action: "WAIT",
+      label: "Cash protected",
+      price,
+      reason: "The risk budget or cash balance is too small for a clean paper position.",
+      levels,
+    };
+  }
+
+  return {
+    action: "BUY",
+    label: "Open paper trade",
+    price,
+    shares,
+    value,
+    reason: `Fundamental says ${johnView.verdict} (${johnView.score}/100), Technical says ${maxView.verdict} (${maxView.score}/100), and final conviction is ${decision.conviction}/100.`,
+    levels,
+  };
+}
+
+function addPaperBotTrade(trade) {
+  paperBotState.trades = [
+    {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      time: new Date().toISOString(),
+      ...trade,
+    },
+    ...(paperBotState.trades ?? []),
+  ].slice(0, 200);
+}
+
+function storePaperBotEvaluation(company, plan) {
+  if (!company?.ticker) {
+    return;
+  }
+  paperBotState.lastEvaluations[company.ticker] = {
+    time: new Date().toISOString(),
+    action: plan.action,
+    label: plan.label,
+    reason: plan.reason,
+    price: plan.price ?? null,
+  };
+}
+
+function executePaperBotPlan(company, johnView, maxView, decision, plan) {
+  if (!company?.ticker || !plan) {
+    return plan;
+  }
+  const ticker = company.ticker;
+  storePaperBotEvaluation(company, plan);
+
+  if (plan.action === "BUY") {
+    paperBotState.cash -= plan.value;
+    paperBotState.positions[ticker] = {
+      ticker,
+      name: company.name,
+      shares: plan.shares,
+      entryPrice: plan.price,
+      lastPrice: plan.price,
+      stop: plan.levels.stop,
+      target1: plan.levels.target1,
+      target2: plan.levels.target2,
+      target3: plan.levels.target3,
+      openedAt: new Date().toISOString(),
+      finalCall: decision.finalCall,
+      conviction: decision.conviction,
+      johnVerdict: johnView.verdict,
+      johnScore: johnView.score,
+      maxVerdict: maxView.verdict,
+      maxScore: maxView.score,
+    };
+    addPaperBotTrade({
+      type: "BUY",
+      ticker,
+      shares: plan.shares,
+      price: plan.price,
+      value: plan.value,
+      reason: plan.reason,
+    });
+  } else if (plan.action === "SELL" && paperBotState.positions[ticker]) {
+    const position = paperBotState.positions[ticker];
+    const shares = Number(position.shares ?? 0);
+    const value = shares * plan.price;
+    const pnl = (plan.price - Number(position.entryPrice ?? plan.price)) * shares;
+    paperBotState.cash += value;
+    paperBotState.realizedPnl += pnl;
+    delete paperBotState.positions[ticker];
+    addPaperBotTrade({
+      type: "SELL",
+      ticker,
+      shares,
+      price: plan.price,
+      value,
+      pnl,
+      reason: plan.reason,
+    });
+  } else if (paperBotState.positions[ticker] && plan.levels) {
+    paperBotState.positions[ticker] = {
+      ...paperBotState.positions[ticker],
+      lastPrice: plan.price,
+      stop: plan.levels.stop,
+      target1: plan.levels.target1,
+      target2: plan.levels.target2,
+      target3: plan.levels.target3,
+      finalCall: decision.finalCall,
+      conviction: decision.conviction,
+      johnVerdict: johnView.verdict,
+      johnScore: johnView.score,
+      maxVerdict: maxView.verdict,
+      maxScore: maxView.score,
+    };
+  }
+
+  savePaperBotState();
+  return plan;
+}
+
+function evaluatePaperBotForSelection(company, johnView, maxView, decision, options = {}) {
+  const plan = calculatePaperBotPlan(company, johnView, maxView, decision);
+  const shouldExecute = options.execute === true;
+  if (shouldExecute) {
+    return executePaperBotPlan(company, johnView, maxView, decision, plan);
+  }
+  storePaperBotEvaluation(company, plan);
+  savePaperBotState();
+  return plan;
+}
+
+function makePaperBotMetric(label, value, tone = "") {
+  const item = document.createElement("div");
+  item.className = "paper-bot-metric";
+  if (tone) {
+    item.dataset.tone = tone;
+  }
+  const labelElement = document.createElement("span");
+  labelElement.textContent = label;
+  const valueElement = document.createElement("strong");
+  valueElement.textContent = value;
+  item.append(labelElement, valueElement);
+  return item;
+}
+
+function makePaperBotEmptyRow(message, columns) {
+  const row = document.createElement("tr");
+  const cell = document.createElement("td");
+  cell.colSpan = columns;
+  cell.className = "paper-bot-empty";
+  cell.textContent = message;
+  row.append(cell);
+  return row;
+}
+
+function renderPaperBotPanel(company = null, johnView = null, maxView = null, decision = null, plan = null) {
+  if (!paperBotEquity) {
+    return;
+  }
+  const snapshot = getPaperBotSnapshot(company);
+  const activePlan = plan ?? calculatePaperBotPlan(company, johnView, maxView, decision);
+  const openTone = snapshot.unrealizedPnl > 0 ? "positive" : snapshot.unrealizedPnl < 0 ? "negative" : "";
+  const realizedTone = snapshot.realizedPnl > 0 ? "positive" : snapshot.realizedPnl < 0 ? "negative" : "";
+
+  paperBotEquity.textContent = formatMoney(snapshot.equity);
+  paperBotReturn.textContent = `${formatPercent(snapshot.returnPct)} total return`;
+  paperBotMetrics?.replaceChildren(
+    makePaperBotMetric("Cash", formatMoney(snapshot.cash)),
+    makePaperBotMetric("Open value", formatMoney(snapshot.openValue)),
+    makePaperBotMetric("Open P/L", formatSignedMoney(snapshot.unrealizedPnl), openTone),
+    makePaperBotMetric("Realized P/L", formatSignedMoney(snapshot.realizedPnl), realizedTone),
+  );
+
+  if (paperBotInstruction) {
+    paperBotInstruction.textContent = activePlan.label;
+    paperBotInstruction.className = `paper-bot-instruction paper-bot-instruction--${getPaperBotActionTone(activePlan.action)}`;
+  }
+  if (paperBotReason) {
+    paperBotReason.textContent = activePlan.reason;
+  }
+  if (paperBotAutoToggle) {
+    paperBotAutoToggle.textContent = paperBotState.autoEnabled ? "Auto paper: On" : "Auto paper: Off";
+    paperBotAutoToggle.setAttribute("aria-pressed", String(paperBotState.autoEnabled));
+    paperBotAutoToggle.classList.toggle("is-active", paperBotState.autoEnabled);
+  }
+  if (paperBotEvaluate) {
+    paperBotEvaluate.disabled = !company;
+  }
+  if (paperBotPositionCount) {
+    paperBotPositionCount.textContent = `${snapshot.positions.length} open`;
+  }
+  if (paperBotPositions) {
+    paperBotPositions.replaceChildren(
+      ...(snapshot.positions.length
+        ? snapshot.positions.map((position) => {
+            const row = document.createElement("tr");
+            const pnlTone = position.unrealizedPnl >= 0 ? "positive" : "negative";
+            row.innerHTML = `
+              <td><strong>${position.ticker}</strong><small>${position.name ?? ""}</small></td>
+              <td>${formatNumber(position.shares, 4)}</td>
+              <td>${formatMoney(position.entryPrice)}</td>
+              <td>${formatMoney(position.markPrice)}</td>
+              <td data-tone="${pnlTone}">${formatSignedMoney(position.unrealizedPnl)}</td>
+            `;
+            return row;
+          })
+        : [makePaperBotEmptyRow("No open paper positions yet.", 5)]),
+    );
+  }
+  if (paperBotActivityCount) {
+    paperBotActivityCount.textContent =
+      paperBotState.trades.length === 0
+        ? "No trades yet"
+        : `${paperBotState.trades.length} recorded`;
+  }
+  if (paperBotActivity) {
+    paperBotActivity.replaceChildren(
+      ...(paperBotState.trades.length
+        ? paperBotState.trades.slice(0, 8).map((trade) => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+              <td>${formatPaperBotTime(trade.time)}</td>
+              <td><span class="paper-bot-trade paper-bot-trade--${String(trade.type).toLowerCase()}">${trade.type}</span></td>
+              <td>${trade.ticker}</td>
+              <td>${formatMoney(trade.value)}${hasValue(trade.pnl) ? `<small>${formatSignedMoney(trade.pnl)}</small>` : ""}</td>
+              <td class="paper-bot-table__reason">${trade.reason}</td>
+            `;
+            return row;
+          })
+        : [makePaperBotEmptyRow("Activity appears here after the bot opens or exits paper trades.", 5)]),
+    );
+  }
+}
+
+function resetPaperBot() {
+  paperBotState = createDefaultPaperBotState();
+  savePaperBotState();
+  const company = companyUniverseById.get(currentCompanyId);
+  if (!company) {
+    renderPaperBotPanel();
+    return;
+  }
+  const opportunity = getOpportunityProfile(company);
+  const johnView = buildJohnView(company, opportunity, opportunity.resolved, { includeDetails: false });
+  const maxView = buildMaxView(company, opportunity, opportunity.resolved, { includeDetails: false });
+  const decision = combineTradingDecision(johnView, maxView);
+  renderPaperBotPanel(company, johnView, maxView, decision);
+}
+
 function renderPriceLadder(levels) {
   const ladder = document.querySelector("#max-price-ladder");
   if (!ladder) {
@@ -4641,6 +5444,7 @@ function renderAgentDashboards(company, opportunity, resolved) {
     document.querySelector("#trading-decision-summary").textContent =
       "Select a ticker to combine Fundamental and Technical into one actionable view.";
     document.querySelector("#trading-decision-grid")?.replaceChildren();
+    renderPaperBotPanel();
     return;
   }
 
@@ -4648,6 +5452,9 @@ function renderAgentDashboards(company, opportunity, resolved) {
   const maxView = buildMaxView(company, opportunity, resolved);
   const decision = combineTradingDecision(johnView, maxView);
   const levels = maxView.levels;
+  const paperBotPlan = evaluatePaperBotForSelection(company, johnView, maxView, decision, {
+    execute: paperBotState.autoEnabled,
+  });
 
   setDecisionBadge("#john-verdict", johnView.verdict);
   setDecisionBadge("#max-verdict", maxView.verdict);
@@ -4704,6 +5511,7 @@ function renderAgentDashboards(company, opportunity, resolved) {
       }),
     );
   }
+  renderPaperBotPanel(company, johnView, maxView, decision, paperBotPlan);
 }
 
 function renderCompany(id) {
@@ -5208,6 +6016,39 @@ if (maxLiveToggle) {
 
 if (maxLiveConnect) {
   maxLiveConnect.addEventListener("click", connectLocalFmpKey);
+}
+
+if (paperBotAutoToggle) {
+  paperBotAutoToggle.addEventListener("click", () => {
+    paperBotState.autoEnabled = !paperBotState.autoEnabled;
+    savePaperBotState();
+    const company = companyUniverseById.get(currentCompanyId);
+    if (company) {
+      renderCompany(company.id);
+    } else {
+      renderPaperBotPanel();
+    }
+  });
+}
+
+if (paperBotEvaluate) {
+  paperBotEvaluate.addEventListener("click", () => {
+    const company = companyUniverseById.get(currentCompanyId);
+    if (!company) {
+      renderPaperBotPanel();
+      return;
+    }
+    const opportunity = getOpportunityProfile(company);
+    const johnView = buildJohnView(company, opportunity, opportunity.resolved, { includeDetails: false });
+    const maxView = buildMaxView(company, opportunity, opportunity.resolved, { includeDetails: false });
+    const decision = combineTradingDecision(johnView, maxView);
+    const plan = evaluatePaperBotForSelection(company, johnView, maxView, decision, { execute: true });
+    renderPaperBotPanel(company, johnView, maxView, decision, plan);
+  });
+}
+
+if (paperBotReset) {
+  paperBotReset.addEventListener("click", resetPaperBot);
 }
 
 clearFiltersButton.addEventListener("click", resetFilters);

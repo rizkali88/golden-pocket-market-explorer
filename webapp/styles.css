@@ -1122,6 +1122,273 @@ body::before {
   font-size: 1rem;
 }
 
+.paper-bot-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.paper-bot-panel__header,
+.paper-bot-data-grid,
+.paper-bot-overview {
+  display: grid;
+  gap: 16px;
+}
+
+.paper-bot-panel__header {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.paper-bot-panel__header h2 {
+  max-width: 900px;
+}
+
+.paper-bot-panel__note {
+  max-width: 74ch;
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.paper-bot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.paper-bot-button {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 10px 16px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.08);
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    transform 180ms ease;
+}
+
+.paper-bot-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(99, 210, 200, 0.44);
+  background: rgba(99, 210, 200, 0.12);
+}
+
+.paper-bot-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.paper-bot-button.is-active {
+  border-color: rgba(99, 210, 200, 0.5);
+  background: rgba(99, 210, 200, 0.12);
+}
+
+.paper-bot-button--ghost {
+  color: var(--muted);
+}
+
+.paper-bot-overview {
+  grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1.2fr);
+}
+
+.paper-bot-card,
+.paper-bot-table-card {
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  padding: 18px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.05);
+}
+
+.paper-bot-card {
+  display: grid;
+  gap: 10px;
+}
+
+.paper-bot-card > span,
+.paper-bot-table-card__header span {
+  color: var(--accent);
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.paper-bot-card > strong {
+  color: var(--ink);
+  font-family: "Georgia", "Palatino Linotype", serif;
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  line-height: 1;
+}
+
+.paper-bot-card > small,
+.paper-bot-table-card__header small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.paper-bot-card--account {
+  box-shadow: inset 4px 0 0 rgba(99, 210, 200, 0.6);
+}
+
+.paper-bot-card--instruction {
+  box-shadow: inset 4px 0 0 rgba(255, 177, 108, 0.6);
+}
+
+.paper-bot-instruction {
+  display: inline-flex;
+  width: max-content;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.paper-bot-instruction--buy {
+  border-color: rgba(43, 111, 89, 0.6);
+  background: rgba(43, 111, 89, 0.14);
+}
+
+.paper-bot-instruction--sell {
+  border-color: rgba(232, 111, 97, 0.62);
+  background: rgba(232, 111, 97, 0.13);
+}
+
+.paper-bot-instruction--wait {
+  border-color: rgba(201, 111, 59, 0.55);
+  background: rgba(201, 111, 59, 0.13);
+}
+
+.paper-bot-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.paper-bot-metric {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.paper-bot-metric span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.paper-bot-metric strong {
+  color: var(--ink);
+}
+
+.paper-bot-metric[data-tone="positive"] strong,
+.paper-bot-table td[data-tone="positive"] {
+  color: var(--accent);
+}
+
+.paper-bot-metric[data-tone="negative"] strong,
+.paper-bot-table td[data-tone="negative"] {
+  color: #e86f61;
+}
+
+.paper-bot-data-grid {
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.25fr);
+}
+
+.paper-bot-table-card {
+  min-width: 0;
+}
+
+.paper-bot-table-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.paper-bot-table-wrap {
+  overflow-x: auto;
+}
+
+.paper-bot-table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+}
+
+.paper-bot-table th,
+.paper-bot-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 11px 10px;
+  color: var(--ink);
+  text-align: left;
+  vertical-align: top;
+}
+
+.paper-bot-table th {
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.paper-bot-table td {
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.paper-bot-table td small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.paper-bot-empty,
+.paper-bot-table__reason {
+  color: var(--muted) !important;
+  font-weight: 700 !important;
+  line-height: 1.45;
+}
+
+.paper-bot-trade {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.paper-bot-trade--buy {
+  border-color: rgba(43, 111, 89, 0.58);
+  background: rgba(43, 111, 89, 0.14);
+}
+
+.paper-bot-trade--sell {
+  border-color: rgba(232, 111, 97, 0.6);
+  background: rgba(232, 111, 97, 0.12);
+}
+
 .report-header {
   display: grid;
   gap: 16px;
@@ -2250,6 +2517,9 @@ p {
   .agent-input-grid,
   .agent-target-strip,
   .trading-decision-card,
+  .paper-bot-panel__header,
+  .paper-bot-overview,
+  .paper-bot-data-grid,
   .vehicle-layout,
   .scenario-layout,
   .trigger-layout,
@@ -2285,6 +2555,10 @@ p {
   }
 
   .max-execution-range-switcher {
+    justify-content: flex-start;
+  }
+
+  .paper-bot-actions {
     justify-content: flex-start;
   }
 
@@ -2333,6 +2607,7 @@ p {
 
 @media (max-width: 640px) {
   .trading-decision-grid,
+  .paper-bot-metrics,
   .price-ladder__row {
     grid-template-columns: 1fr;
   }
