@@ -1016,9 +1016,25 @@ const heroMetaDataset = document.querySelector("#hero-meta-dataset");
 const heroMetaSelection = document.querySelector("#hero-meta-selection");
 const rosterTitle = document.querySelector("#roster-title");
 const rosterNote = document.querySelector("#roster-note");
+const tradingViewChartHost = document.querySelector("#tradingview-chart-host");
+const tradingViewChartTitle = document.querySelector("#tradingview-chart-title");
+const tradingViewChartSubtitle = document.querySelector("#tradingview-chart-subtitle");
+const tradingViewSymbolLink = document.querySelector("#tradingview-symbol-link");
 const layoutSections = [...document.querySelectorAll("[data-layout-id]")].sort(
   (left, right) => Number(left.dataset.layoutId) - Number(right.dataset.layoutId),
 );
+
+const TRADINGVIEW_EXCHANGE_PREFIXES = new Map([
+  ["nasdaq", "NASDAQ"],
+  ["nyse", "NYSE"],
+  ["nyse arca", "AMEX"],
+  ["nyse american", "AMEX"],
+  ["amex", "AMEX"],
+  ["otc", "OTC"],
+  ["cboe", "CBOE"],
+  ["cboe bzx", "CBOE"],
+  ["iex", "IEX"],
+]);
 
 let currentScenarioId = "base";
 let currentCompanyId = "well";
@@ -1034,6 +1050,7 @@ const currentFilters = {
   finalCallSort: "none",
 };
 let layoutModeResetTimer = null;
+let currentTradingViewKey = "";
 
 function makeButton(item, className, onClick) {
   const button = document.createElement("button");
@@ -1141,6 +1158,124 @@ function titleCase(value) {
 
 function pluralize(count, singular, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function normalizeTradingViewTicker(ticker) {
+  return String(ticker ?? "")
+    .trim()
+    .replace(/-/g, ".")
+    .replace(/\s+/g, "");
+}
+
+function getTradingViewSymbol(company) {
+  const ticker = normalizeTradingViewTicker(company?.ticker);
+  if (!ticker) {
+    return "NASDAQ:AAPL";
+  }
+  const exchange = String(company?.exchange ?? "").trim().toLowerCase();
+  const prefix = TRADINGVIEW_EXCHANGE_PREFIXES.get(exchange);
+  return prefix ? `${prefix}:${ticker}` : ticker;
+}
+
+function getTradingViewSymbolPath(symbol) {
+  const [prefix, ticker = prefix] = symbol.split(":");
+  if (!symbol.includes(":")) {
+    return ticker.replace(/\./g, "-");
+  }
+  return `${prefix}-${ticker.replace(/\./g, "-")}`;
+}
+
+function makeTradingViewPlaceholder(message) {
+  const placeholder = document.createElement("div");
+  placeholder.className = "tradingview-chart-placeholder";
+  placeholder.innerHTML = `
+    <div>
+      <strong>Chart unavailable</strong>
+      <span>${message}</span>
+    </div>
+  `;
+  return placeholder;
+}
+
+function renderTradingViewChart(company, options = {}) {
+  if (!tradingViewChartHost || !company) {
+    return;
+  }
+
+  const symbol = getTradingViewSymbol(company);
+  const theme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  const widgetKey = `${symbol}:${theme}`;
+  if (!options.force && currentTradingViewKey === widgetKey) {
+    return;
+  }
+  currentTradingViewKey = widgetKey;
+
+  const symbolPath = getTradingViewSymbolPath(symbol);
+  const symbolUrl = `https://www.tradingview.com/symbols/${symbolPath}/`;
+  const title = `${company.ticker} interactive chart`;
+  if (tradingViewChartTitle) {
+    tradingViewChartTitle.textContent = title;
+  }
+  if (tradingViewChartSubtitle) {
+    tradingViewChartSubtitle.textContent =
+      `${company.name} | ${company.exchange || "Exchange pending"} | ${company.sector} / ${company.industry}`;
+  }
+  if (tradingViewSymbolLink) {
+    tradingViewSymbolLink.href = symbolUrl;
+    tradingViewSymbolLink.textContent = `Open ${company.ticker} in TradingView`;
+  }
+
+  const container = document.createElement("div");
+  container.className = "tradingview-widget-container";
+
+  const widget = document.createElement("div");
+  widget.className = "tradingview-widget-container__widget";
+  widget.style.height = "calc(100% - 32px)";
+  widget.style.width = "100%";
+
+  const copyright = document.createElement("div");
+  copyright.className = "tradingview-widget-copyright";
+  const link = document.createElement("a");
+  link.href = `${symbolUrl}?utm_source=golden-pocket-market-explorer&utm_medium=widget_new&utm_campaign=advanced-chart`;
+  link.target = "_blank";
+  link.rel = "noopener nofollow";
+  link.textContent = `${company.ticker} chart`;
+  copyright.append(link, document.createTextNode(" by TradingView"));
+
+  const script = document.createElement("script");
+  script.type = "text/javascript";
+  script.async = true;
+  script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+  script.textContent = JSON.stringify(
+    {
+      autosize: true,
+      symbol,
+      interval: "D",
+      timezone: "exchange",
+      theme,
+      style: "1",
+      locale: "en",
+      withdateranges: true,
+      hide_side_toolbar: false,
+      allow_symbol_change: true,
+      details: true,
+      hotlist: false,
+      calendar: false,
+      save_image: false,
+      support_host: "https://www.tradingview.com",
+    },
+    null,
+    2,
+  );
+  script.onerror = () => {
+    currentTradingViewKey = "";
+    tradingViewChartHost.replaceChildren(
+      makeTradingViewPlaceholder("TradingView could not load. Check the internet connection or browser content blockers."),
+    );
+  };
+
+  container.append(widget, copyright, script);
+  tradingViewChartHost.replaceChildren(container);
 }
 
 function setTextIfExists(selector, value) {
@@ -3076,6 +3211,7 @@ function renderCompany(id) {
   const opportunity = getOpportunityProfile(company);
   const resolved = opportunity.resolved;
   currentCompanyId = company.id;
+  renderTradingViewChart(company);
   if (tickerFilter) {
     tickerFilter.value = currentFilters.selectedTickerId;
   }
@@ -3394,6 +3530,7 @@ function applyTheme(theme) {
   themeToggle.setAttribute("aria-label", theme === "dark" ? "Switch to light mode" : "Switch to dark mode");
   themeToggle.title = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
   window.localStorage.setItem("golden-pocket-theme", theme);
+  renderTradingViewChart(companyUniverseById.get(currentCompanyId), { force: true });
 }
 
 function flashLayoutTarget(section) {

@@ -306,6 +306,104 @@ body::before {
   gap: 18px;
 }
 
+.chart-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.chart-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 16px;
+}
+
+.chart-panel__external {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(99, 210, 200, 0.34);
+  border-radius: 999px;
+  padding: 10px 14px;
+  color: var(--ink);
+  background: rgba(99, 210, 200, 0.1);
+  font-size: 0.88rem;
+  font-weight: 900;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
+}
+
+.chart-panel__external:hover {
+  transform: translateY(-1px);
+  background: rgba(99, 210, 200, 0.16);
+  border-color: rgba(99, 210, 200, 0.52);
+}
+
+.chart-panel__subtitle,
+.chart-panel__note {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.chart-panel__note {
+  font-size: 0.84rem;
+}
+
+.tradingview-chart-shell {
+  position: relative;
+  overflow: hidden;
+  min-height: 620px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(99, 210, 200, 0.1), transparent 32%),
+    rgba(255, 255, 255, 0.045);
+}
+
+.tradingview-widget-container,
+.tradingview-widget-container__widget {
+  height: 100%;
+  width: 100%;
+}
+
+.tradingview-chart-shell .tradingview-widget-container {
+  min-height: 620px;
+}
+
+.tradingview-widget-copyright {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.tradingview-widget-copyright a {
+  color: var(--accent);
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.tradingview-chart-placeholder {
+  min-height: 620px;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.tradingview-chart-placeholder strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--ink);
+  font-size: 1.2rem;
+}
+
 .agent-dashboard-panel {
   display: grid;
   gap: 22px;
@@ -1821,6 +1919,15 @@ p {
     align-items: stretch;
   }
 
+  .chart-panel__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .chart-panel__external {
+    width: max-content;
+  }
+
   .roster-toolbar {
     flex-direction: column;
   }
@@ -1870,6 +1977,12 @@ p {
 
   .report-search {
     width: 100%;
+  }
+
+  .tradingview-chart-shell,
+  .tradingview-chart-shell .tradingview-widget-container,
+  .tradingview-chart-placeholder {
+    min-height: 460px;
   }
 
   .fundamentals-grid {

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golden Pocket Market Explorer - Working Draft</title>
-    <link rel="stylesheet" href="./styles.css?v=20260513-toolbar-refine" />
+    <link rel="stylesheet" href="./styles.css?v=20260513-tradingview" />
   </head>
   <body class="workbench-page">
     <div class="app-shell">
@@ -146,6 +146,25 @@
                 <tbody id="opportunity-table-body"></tbody>
               </table>
             </div>
+          </section>
+
+          <section class="panel reveal chart-panel" data-layout-id="8" data-layout-label="TradingView Chart">
+            <div class="chart-panel__header">
+              <div class="section-heading">
+                <p class="eyebrow">TradingView Chart</p>
+                <h2 id="tradingview-chart-title">Live chart for the selected ticker</h2>
+              </div>
+              <a class="chart-panel__external" id="tradingview-symbol-link" href="https://www.tradingview.com/" target="_blank" rel="noopener nofollow">
+                Open in TradingView
+              </a>
+            </div>
+            <p class="chart-panel__subtitle" id="tradingview-chart-subtitle">
+              Select a ticker from the table or toolbar to load the interactive TradingView chart.
+            </p>
+            <div class="tradingview-chart-shell" id="tradingview-chart-host" aria-live="polite"></div>
+            <p class="chart-panel__note">
+              Chart is loaded from TradingView's free Advanced Chart widget. It may show delayed exchange data depending on the symbol and TradingView data availability.
+            </p>
           </section>
 
           <section class="panel reveal agent-dashboard-panel" id="agent-dashboard-panel" data-layout-id="5.5" data-layout-label="Fundamental and Technical Dashboards">
@@ -294,6 +313,7 @@
             <li><a href="https://www.sec.gov/files/company_tickers_exchange.json" target="_blank" rel="noreferrer">SEC company_tickers_exchange.json</a></li>
             <li><a href="https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data" target="_blank" rel="noreferrer">SEC EDGAR Data Access Guidance</a></li>
             <li><a href="https://www.sec.gov/search-filings/edgar-application-programming-interfaces" target="_blank" rel="noreferrer">SEC EDGAR API Documentation</a></li>
+            <li><a href="https://www.tradingview.com/widget-docs/widgets/charts/advanced-chart/" target="_blank" rel="noreferrer">TradingView Advanced Chart Widget</a></li>
             <li><a href="https://www.reit.com/what-reit/reit-sectors/health-care" target="_blank" rel="noreferrer">Nareit Health Care REIT Sector Directory</a></li>
             <li><a href="https://fred.stlouisfed.org/series/DGS10" target="_blank" rel="noreferrer">FRED 10-Year Treasury Yield</a></li>
             <li><a href="https://www.ssga.com/us/en/intermediary/etfs/state-street-real-estate-select-sector-spdr-etf-xlre" target="_blank" rel="noreferrer">State Street XLRE Fund Page</a></li>
@@ -308,8 +328,8 @@
 
     <aside class="layout-legend" id="layout-legend" hidden aria-live="polite"></aside>
 
-    <script src="./data/market_universe.js?v=20260513-compact-bars"></script>
-    <script src="./data/research_profiles.js?v=20260513-compact-bars"></script>
-    <script src="./app.js?v=20260513-compact-bars"></script>
+    <script src="./data/market_universe.js?v=20260513-tradingview"></script>
+    <script src="./data/research_profiles.js?v=20260513-tradingview"></script>
+    <script src="./app.js?v=20260513-tradingview"></script>
   </body>
 </html>
