@@ -1010,7 +1010,7 @@ html:not([data-theme="dark"]) .opportunity-table thead th {
 
 .opportunity-table__conviction {
   display: grid;
-  gap: 10px;
+  gap: 7px;
   min-width: 300px;
 }
 
@@ -1022,20 +1022,25 @@ html:not([data-theme="dark"]) .opportunity-table thead th {
 
 .conviction-bar {
   display: grid;
-  gap: 5px;
+  grid-template-columns: 92px minmax(120px, 1fr) 120px;
+  gap: 10px;
+  align-items: center;
 }
 
-.conviction-bar__labels {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--muted);
+.conviction-bar__label,
+.conviction-bar__value {
   font-size: 0.82rem;
   font-weight: 800;
 }
 
-.conviction-bar__labels span:first-child {
+.conviction-bar__label {
   color: var(--ink);
+}
+
+.conviction-bar__value {
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
 }
 
 .opportunity-table__conviction-track {

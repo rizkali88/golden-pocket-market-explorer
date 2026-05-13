@@ -2520,13 +2520,11 @@ function makeReturnBar({ label, value }) {
 function buildConvictionBar(label, value, detail) {
   return `
     <div class="conviction-bar">
-      <div class="conviction-bar__labels">
-        <span>${label}</span>
-        <span>${Math.round(value)}/100${detail ? ` - ${detail}` : ""}</span>
-      </div>
+      <span class="conviction-bar__label">${label}</span>
       <div class="opportunity-table__conviction-track">
         <i class="opportunity-table__conviction-fill" style="width:${clampNumber(value, 0, 100)}%"></i>
       </div>
+      <span class="conviction-bar__value">${Math.round(value)}/100${detail ? ` - ${detail}` : ""}</span>
     </div>
   `;
 }
@@ -3331,7 +3329,6 @@ function renderOpportunityTable() {
             <div class="opportunity-table__decision-topline">
               <span class="opportunity-table__decision opportunity-table__decision--${decision.finalCall.toLowerCase()}">${decision.finalCall}</span>
             </div>
-            <small>Fundamental: ${johnView.verdict} (${johnView.score}/100) | Technical: ${maxView.verdict} (${maxView.score}/100)</small>
           </div>
         </td>
         <td>
