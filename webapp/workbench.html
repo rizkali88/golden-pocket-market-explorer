@@ -349,11 +349,37 @@
 
     <aside class="layout-legend" id="layout-legend" hidden aria-live="polite"></aside>
 
-    <script src="./data/market_universe.js?v=20260513-table-chart-cleanup"></script>
-    <script src="./data/research_profiles.js?v=20260513-table-chart-cleanup"></script>
-    <script src="./data/history/index.js?v=20260513-10y-history"></script>
-    <script src="./data/live_config.js?v=20260513-fmp-live"></script>
-    <script src="https://unpkg.com/lightweight-charts@4.2.2/dist/lightweight-charts.standalone.production.js"></script>
-    <script src="./app.js?v=20260513-10y-history"></script>
+    <script>
+      (() => {
+        const cacheVersion = String(Date.now());
+        const scripts = [
+          "./data/market_universe.js",
+          "./data/research_profiles.js",
+          "./data/history/index.js",
+          "./data/live_config.js",
+          "https://unpkg.com/lightweight-charts@4.2.2/dist/lightweight-charts.standalone.production.js",
+          "./app.js",
+        ];
+        const versionedSource = (source) =>
+          source.startsWith("./")
+            ? `${source}?v=${cacheVersion}`
+            : source;
+        const loadScript = (source) =>
+          new Promise((resolve, reject) => {
+            const script = document.createElement("script");
+            script.src = versionedSource(source);
+            script.onload = resolve;
+            script.onerror = () => reject(new Error(`Failed to load ${source}`));
+            document.body.append(script);
+          });
+
+        scripts
+          .reduce((promise, source) => promise.then(() => loadScript(source)), Promise.resolve())
+          .catch((error) => {
+            document.body.dataset.bootError = error.message;
+            console.error(error);
+          });
+      })();
+    </script>
   </body>
 </html>

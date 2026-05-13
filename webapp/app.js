@@ -1545,7 +1545,10 @@ function loadHistoryChunk(chunkKey, fileName) {
 
   const loadPromise = new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = `./data/history/${fileName}`;
+    const cacheVersion = encodeURIComponent(
+      window.GOLDEN_POCKET_HISTORY_INDEX?.generatedAt ?? "local",
+    );
+    script.src = `./data/history/${fileName}?v=${cacheVersion}`;
     script.async = true;
     script.onload = () => {
       loadedHistoryChunks.add(chunkKey);
