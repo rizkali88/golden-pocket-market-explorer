@@ -306,6 +306,28 @@ body::before {
   gap: 18px;
 }
 
+.market-workspace {
+  display: grid;
+  grid-template-columns: minmax(500px, 0.9fr) minmax(560px, 1.1fr);
+  gap: 20px;
+  align-items: stretch;
+}
+
+.market-workspace > .panel {
+  min-width: 0;
+}
+
+.market-workspace .opportunity-panel,
+.market-workspace .chart-panel {
+  align-content: start;
+}
+
+@media (max-width: 1180px) {
+  .market-workspace {
+    grid-template-columns: 1fr;
+  }
+}
+
 .chart-panel {
   display: grid;
   gap: 16px;
@@ -354,7 +376,7 @@ body::before {
 .tradingview-chart-shell {
   position: relative;
   overflow: hidden;
-  min-height: 620px;
+  min-height: 640px;
   border: 1px solid var(--line);
   border-radius: 24px;
   background:
@@ -369,7 +391,7 @@ body::before {
 }
 
 .tradingview-chart-shell .tradingview-widget-container {
-  min-height: 620px;
+  min-height: 640px;
 }
 
 .tradingview-widget-copyright {
@@ -389,7 +411,7 @@ body::before {
 }
 
 .tradingview-chart-placeholder {
-  min-height: 620px;
+  min-height: 640px;
   display: grid;
   place-items: center;
   padding: 24px;
@@ -1165,6 +1187,49 @@ html:not([data-theme="dark"]) .opportunity-table thead th {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
+.market-workspace .opportunity-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.market-workspace .opportunity-table tbody td {
+  padding-inline: 12px;
+}
+
+.market-workspace .opportunity-table th:nth-child(1),
+.market-workspace .opportunity-table td:nth-child(1) {
+  width: 45%;
+}
+
+.market-workspace .opportunity-table th:nth-child(2),
+.market-workspace .opportunity-table td:nth-child(2) {
+  width: 21%;
+}
+
+.market-workspace .opportunity-table th:nth-child(3),
+.market-workspace .opportunity-table td:nth-child(3) {
+  width: 34%;
+}
+
+.market-workspace .opportunity-table__conviction {
+  min-width: 0;
+}
+
+.market-workspace .conviction-bar {
+  grid-template-columns: 62px minmax(42px, 1fr) 80px;
+  gap: 8px;
+}
+
+.market-workspace .conviction-bar__label,
+.market-workspace .conviction-bar__value {
+  font-size: 0.72rem;
+}
+
+.market-workspace .conviction-bar__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .detail-card {
