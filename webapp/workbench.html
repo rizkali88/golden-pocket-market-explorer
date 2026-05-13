@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golden Pocket Market Explorer - Working Draft</title>
-    <link rel="stylesheet" href="./styles.css?v=20260513-toolbar-toggle-cleanup" />
+    <link rel="stylesheet" href="./styles.css?v=20260513-paperbot-fast-hydrate" />
   </head>
   <body class="workbench-page">
     <div class="app-shell">
@@ -414,6 +414,220 @@
     </div>
 
     <aside class="layout-legend" id="layout-legend" hidden aria-live="polite"></aside>
+
+    <script>
+      (() => {
+        const storageKey = "golden-pocket-paper-bot-v1";
+        const startingCash = 10000;
+        const moneyFormatter = new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+        const numberFormatter = new Intl.NumberFormat("en-US", {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 4,
+        });
+
+        const getNumber = (value, fallback = 0) => {
+          const parsed = Number(value);
+          return Number.isFinite(parsed) ? parsed : fallback;
+        };
+        const formatMoney = (value) => moneyFormatter.format(getNumber(value));
+        const formatSignedMoney = (value) => {
+          const parsed = getNumber(value);
+          return `${parsed >= 0 ? "" : "-"}${formatMoney(Math.abs(parsed))}`;
+        };
+        const formatPercent = (value) => {
+          const parsed = getNumber(value);
+          return `${parsed >= 0 ? "+" : ""}${parsed.toFixed(2)}%`;
+        };
+        const formatNumber = (value) => numberFormatter.format(getNumber(value));
+        const escapeHtml = (value) =>
+          String(value ?? "")
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#39;");
+        const readPaperBotState = () => {
+          try {
+            const stored = window.localStorage.getItem(storageKey);
+            return stored ? JSON.parse(stored) : null;
+          } catch {
+            return null;
+          }
+        };
+        const getMarkPrice = (position) => {
+          const candidates = [
+            position?.lastPrice,
+            position?.markPrice,
+            position?.price,
+            position?.entryPrice,
+          ];
+          for (const candidate of candidates) {
+            const price = Number(candidate);
+            if (Number.isFinite(price) && price > 0) {
+              return price;
+            }
+          }
+          return 0;
+        };
+        const formatTime = (value) => {
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) {
+            return "Saved";
+          }
+          return date.toLocaleString([], {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          });
+        };
+        const makeMetric = (label, value, tone = "") => {
+          const metric = document.createElement("div");
+          metric.className = "paper-bot-metric";
+          if (tone) {
+            metric.dataset.tone = tone;
+          }
+          metric.innerHTML = `<span>${label}</span><strong>${value}</strong>`;
+          return metric;
+        };
+        const makeEmptyRow = (message, colspan) => {
+          const row = document.createElement("tr");
+          row.className = "paper-bot-empty";
+          row.innerHTML = `<td colspan="${colspan}">${message}</td>`;
+          return row;
+        };
+
+        const state = readPaperBotState();
+        if (!state || typeof state !== "object") {
+          return;
+        }
+
+        const positions = Object.values(state.positions ?? {}).map((position) => {
+          const shares = getNumber(position?.shares);
+          const entryPrice = getNumber(position?.entryPrice, getMarkPrice(position));
+          const markPrice = getMarkPrice(position);
+          const marketValue = shares * markPrice;
+          const costBasis = shares * entryPrice;
+          return {
+            ...position,
+            ticker: String(position?.ticker ?? ""),
+            name: String(position?.name ?? ""),
+            shares,
+            entryPrice,
+            markPrice,
+            marketValue,
+            unrealizedPnl: marketValue - costBasis,
+          };
+        });
+        const cash = getNumber(state.cash, startingCash);
+        const openValue = positions.reduce((sum, position) => sum + position.marketValue, 0);
+        const unrealizedPnl = positions.reduce((sum, position) => sum + position.unrealizedPnl, 0);
+        const realizedPnl = getNumber(state.realizedPnl);
+        const equity = cash + openValue;
+        const returnPct = ((equity - startingCash) / startingCash) * 100;
+
+        const setText = (selector, value) => {
+          const element = document.querySelector(selector);
+          if (element) {
+            element.textContent = value;
+          }
+          return element;
+        };
+
+        setText("#paper-bot-equity", formatMoney(equity));
+        setText("#paper-bot-return", `${formatPercent(returnPct)} total return`);
+        const metrics = document.querySelector("#paper-bot-metrics");
+        metrics?.replaceChildren(
+          makeMetric("Cash", formatMoney(cash)),
+          makeMetric("Open value", formatMoney(openValue)),
+          makeMetric(
+            "Open P/L",
+            formatSignedMoney(unrealizedPnl),
+            unrealizedPnl > 0 ? "positive" : unrealizedPnl < 0 ? "negative" : "",
+          ),
+          makeMetric(
+            "Realized P/L",
+            formatSignedMoney(realizedPnl),
+            realizedPnl > 0 ? "positive" : realizedPnl < 0 ? "negative" : "",
+          ),
+        );
+
+        const instruction = setText(
+          "#paper-bot-instruction",
+          positions.length ? "Hold position" : "Awaiting ticker",
+        );
+        if (instruction) {
+          instruction.className = `paper-bot-instruction paper-bot-instruction--${
+            positions.length ? "buy" : "wait"
+          }`;
+        }
+        setText(
+          "#paper-bot-reason",
+          positions.length
+            ? "Saved paper account loaded instantly. Live marks refresh after market data finishes."
+            : "Select a ticker to let the paper bot read the combined decision.",
+        );
+        const autoToggle = document.querySelector("#paper-bot-auto-toggle");
+        if (autoToggle) {
+          const isAutoEnabled = state.autoEnabled !== false;
+          autoToggle.textContent = isAutoEnabled ? "Auto paper: On" : "Auto paper: Off";
+          autoToggle.setAttribute("aria-pressed", String(isAutoEnabled));
+          autoToggle.classList.toggle("is-active", isAutoEnabled);
+        }
+
+        setText("#paper-bot-position-count", `${positions.length} open`);
+        const positionsBody = document.querySelector("#paper-bot-positions");
+        if (positionsBody) {
+          positionsBody.replaceChildren(
+            ...(positions.length
+              ? positions.map((position) => {
+                  const row = document.createElement("tr");
+                  row.innerHTML = `
+                    <td><strong>${escapeHtml(position.ticker)}</strong><small>${escapeHtml(position.name)}</small></td>
+                    <td>${formatNumber(position.shares)}</td>
+                    <td>${formatMoney(position.entryPrice)}</td>
+                    <td>${formatMoney(position.markPrice)}<small>saved mark</small></td>
+                    <td data-tone="${position.unrealizedPnl >= 0 ? "positive" : "negative"}">${formatSignedMoney(position.unrealizedPnl)}</td>
+                  `;
+                  return row;
+                })
+              : [makeEmptyRow("No open paper positions yet.", 5)]),
+          );
+        }
+
+        const trades = Array.isArray(state.trades) ? state.trades : [];
+        setText(
+          "#paper-bot-activity-count",
+          trades.length ? `${trades.length} recorded` : "No trades yet",
+        );
+        const activityBody = document.querySelector("#paper-bot-activity");
+        if (activityBody) {
+          activityBody.replaceChildren(
+            ...(trades.length
+              ? trades.slice(0, 8).map((trade) => {
+                  const type = String(trade?.type ?? "NOTE").toUpperCase();
+                  const value = getNumber(trade?.value, getNumber(trade?.shares) * getNumber(trade?.price));
+                  const pnl = Number(trade?.pnl);
+                  const row = document.createElement("tr");
+                  row.innerHTML = `
+                    <td>${formatTime(trade?.time)}</td>
+                    <td><span class="paper-bot-trade paper-bot-trade--${escapeHtml(type.toLowerCase())}">${escapeHtml(type)}</span></td>
+                    <td>${escapeHtml(trade?.ticker ?? "")}</td>
+                    <td>${formatMoney(value)}${Number.isFinite(pnl) ? `<small>${formatSignedMoney(pnl)}</small>` : ""}</td>
+                    <td class="paper-bot-table__reason">${escapeHtml(trade?.reason ?? "")}</td>
+                  `;
+                  return row;
+                })
+              : [makeEmptyRow("Activity appears here after the bot opens or exits paper trades.", 5)]),
+          );
+        }
+      })();
+    </script>
 
     <script>
       (() => {

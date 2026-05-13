@@ -6253,6 +6253,8 @@ themeToggle.addEventListener("click", () => {
 
 initializeTheme();
 initializeLayoutMode();
+renderPaperBotPanelForCurrentSelection();
+schedulePaperBotLiveRefresh();
 refreshExplorer();
 renderScenario("base");
 updateReadiness();
