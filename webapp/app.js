@@ -3230,22 +3230,22 @@ function renderOpportunityTable() {
       const johnView = buildJohnView(company, opportunity, resolved);
       const maxView = buildMaxView(company, opportunity, resolved);
       const decision = combineTradingDecision(johnView, maxView);
+      const isResearchReady = isResearchReadyProfile(company);
       const row = document.createElement("tr");
       row.dataset.id = company.id;
       row.innerHTML = `
         <td>
           <div class="opportunity-table__cell">
-            <div class="opportunity-table__badges">
-              <span class="opportunity-table__tag ${isResearchReadyProfile(company) ? "opportunity-table__tag--research" : "opportunity-table__tag--directory"}">${isResearchReadyProfile(company) ? "Research-ready" : "Directory-only"}</span>
-            </div>
             <strong>${company.ticker}</strong>
-            <small>${company.name}</small>
-          </div>
-        </td>
-        <td>
-          <div class="opportunity-table__cell">
-            <strong>${company.industry}</strong>
-            <small>${company.sector}</small>
+            <small class="opportunity-table__name-line">
+              <span>${company.name}</span>
+              <i
+                class="opportunity-table__status-dot ${isResearchReady ? "opportunity-table__status-dot--research" : "opportunity-table__status-dot--directory"}"
+                title="${isResearchReady ? "Research-ready" : "Directory-only"}"
+                aria-label="${isResearchReady ? "Research-ready" : "Directory-only"}"
+              ></i>
+            </small>
+            <small>${company.industry} | ${company.sector}</small>
           </div>
         </td>
         <td>

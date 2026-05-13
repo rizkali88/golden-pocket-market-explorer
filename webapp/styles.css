@@ -799,7 +799,7 @@ body::before {
 
 .opportunity-table {
   width: 100%;
-  min-width: 880px;
+  min-width: 760px;
   border-collapse: collapse;
 }
 
@@ -899,6 +899,42 @@ html:not([data-theme="dark"]) .opportunity-table thead th {
   background: rgba(242, 168, 90, 0.12);
   border-color: rgba(242, 168, 90, 0.24);
   color: #d48f37;
+}
+
+.opportunity-table__name-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(420px, 100%);
+}
+
+.opportunity-table__name-line span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opportunity-table__status-dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.04);
+}
+
+.opportunity-table__status-dot--research {
+  border-color: rgba(69, 183, 149, 0.48);
+  background: #45b795;
+  box-shadow: 0 0 0 4px rgba(69, 183, 149, 0.13);
+}
+
+.opportunity-table__status-dot--directory {
+  border-color: rgba(242, 168, 90, 0.44);
+  background: #d48f37;
+  box-shadow: 0 0 0 4px rgba(242, 168, 90, 0.12);
 }
 
 .opportunity-table__decision {
