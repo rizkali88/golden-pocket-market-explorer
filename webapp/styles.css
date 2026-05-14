@@ -1492,7 +1492,7 @@ body::before {
   backdrop-filter: blur(10px);
 }
 
-.paper-bot-modal__dialog {
+.paper-bot-modal .paper-bot-modal__dialog {
   position: relative;
   z-index: 1;
   display: grid;
@@ -1512,21 +1512,21 @@ body::before {
   overflow: hidden;
 }
 
-.paper-bot-modal__header {
+.paper-bot-modal .paper-bot-modal__header {
   display: flex;
   justify-content: space-between;
   gap: 18px;
   align-items: start;
 }
 
-.paper-bot-modal__header h2 {
+.paper-bot-modal .paper-bot-modal__header h2 {
   margin-top: 4px;
   color: #eef6ff;
   font-size: clamp(2rem, 4vw, 3.2rem);
   line-height: 0.98;
 }
 
-.paper-bot-modal__header p:last-child {
+.paper-bot-modal .paper-bot-modal__header p:last-child {
   max-width: 64ch;
   color: #b8c7d9;
   font-weight: 800;
@@ -1536,7 +1536,7 @@ body::before {
   color: #7bd9d2;
 }
 
-.paper-bot-modal__close {
+.paper-bot-modal .paper-bot-modal__close {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   padding: 10px 15px;
@@ -1547,7 +1547,7 @@ body::before {
   cursor: pointer;
 }
 
-.paper-bot-modal__table-wrap {
+.paper-bot-modal .paper-bot-modal__table-wrap {
   overflow: auto;
   min-height: 0;
   border: 1px solid rgba(255, 255, 255, 0.11);
@@ -1556,11 +1556,11 @@ body::before {
   scrollbar-gutter: stable;
 }
 
-.paper-bot-table--transactions {
+.paper-bot-modal .paper-bot-table--transactions {
   min-width: 1040px;
 }
 
-.paper-bot-table--transactions thead th {
+.paper-bot-modal .paper-bot-table--transactions thead th {
   position: sticky;
   top: 0;
   z-index: 1;
