@@ -1053,6 +1053,10 @@ const paperBotTransactionsModal = document.querySelector("#paper-bot-transaction
 const paperBotTransactionsClose = document.querySelector("#paper-bot-transactions-close");
 const paperBotTransactionsBody = document.querySelector("#paper-bot-transactions-body");
 const paperBotTransactionsSummary = document.querySelector("#paper-bot-transactions-summary");
+const paperBotCloseConfirmModal = document.querySelector("#paper-bot-close-confirm-modal");
+const paperBotCloseConfirmMessage = document.querySelector("#paper-bot-close-confirm-message");
+const paperBotCloseConfirmOk = document.querySelector("#paper-bot-close-confirm-ok");
+const paperBotCloseConfirmCancel = document.querySelector("#paper-bot-close-confirm-cancel");
 const layoutSections = [...document.querySelectorAll("[data-layout-id]")].sort(
   (left, right) => Number(left.dataset.layoutId) - Number(right.dataset.layoutId),
 );
@@ -1118,11 +1122,13 @@ const FMP_LIVE_ENABLED_STORAGE_KEY = "golden-pocket-fmp-live-enabled";
 let maxExecutionLiveEnabled =
   window.localStorage.getItem(FMP_LIVE_ENABLED_STORAGE_KEY) === "on";
 const PAPER_BOT_STORAGE_KEY = "golden-pocket-paper-bot-v1";
+const PAPER_BOT_OVERRIDE_STORAGE_KEY = "golden-pocket-paper-bot-overrides-v1";
 const PAPER_BOT_STARTING_CASH = 10000;
 const PAPER_BOT_MAX_POSITION_FRACTION = 0.2;
 const PAPER_BOT_RISK_FRACTION = 0.01;
 const PAPER_BOT_CLOUD_REFRESH_SECONDS = 60;
 let paperBotState = loadPaperBotState();
+let pendingPaperBotCloseTicker = null;
 
 const MAX_EXECUTION_RANGES = [
   { id: "1d", label: "1D", days: 1 },
@@ -5058,6 +5064,81 @@ function createDefaultPaperBotState() {
   };
 }
 
+function loadPaperBotOverrides() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(PAPER_BOT_OVERRIDE_STORAGE_KEY) ?? "{}");
+    return {
+      manualCloses: Array.isArray(parsed?.manualCloses) ? parsed.manualCloses : [],
+    };
+  } catch (error) {
+    return { manualCloses: [] };
+  }
+}
+
+function savePaperBotOverrides(overrides) {
+  window.localStorage.setItem(PAPER_BOT_OVERRIDE_STORAGE_KEY, JSON.stringify(overrides));
+}
+
+function rememberPaperBotManualClose(trade) {
+  const overrides = loadPaperBotOverrides();
+  const tradeId = String(trade?.id ?? "");
+  overrides.manualCloses = [
+    trade,
+    ...overrides.manualCloses.filter((item) => String(item?.id ?? "") !== tradeId),
+  ].slice(0, 200);
+  savePaperBotOverrides(overrides);
+}
+
+function clonePaperBotState(state) {
+  return JSON.parse(JSON.stringify(state));
+}
+
+function roundPaperBotMoney(value, decimals = 4) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return 0;
+  }
+  const factor = 10 ** decimals;
+  return Math.round(numericValue * factor) / factor;
+}
+
+function applyPaperBotManualOverrides(state) {
+  const overrides = loadPaperBotOverrides();
+  if (!overrides.manualCloses.length) {
+    return state;
+  }
+  const nextState = clonePaperBotState(state);
+  nextState.positions =
+    nextState.positions && typeof nextState.positions === "object" && !Array.isArray(nextState.positions)
+      ? nextState.positions
+      : {};
+  const trades = Array.isArray(nextState.trades) ? [...nextState.trades] : [];
+  const tradeIds = new Set(trades.map((trade) => String(trade?.id ?? "")));
+
+  overrides.manualCloses.forEach((closeTrade) => {
+    const ticker = getPaperBotTicker(closeTrade);
+    const position = nextState.positions[ticker];
+    const openedAtMatches =
+      !closeTrade?.openedAt || !position?.openedAt || String(closeTrade.openedAt) === String(position.openedAt);
+    if (position && openedAtMatches) {
+      delete nextState.positions[ticker];
+      nextState.cash = roundPaperBotMoney(Number(nextState.cash ?? 0) + Number(closeTrade.value ?? 0));
+      nextState.realizedPnl = roundPaperBotMoney(
+        Number(nextState.realizedPnl ?? 0) + Number(closeTrade.realizedPnl ?? closeTrade.pnl ?? 0),
+      );
+    }
+    if (closeTrade?.id && !tradeIds.has(String(closeTrade.id))) {
+      trades.unshift(closeTrade);
+      tradeIds.add(String(closeTrade.id));
+    }
+  });
+
+  nextState.trades = trades
+    .sort((left, right) => new Date(right?.time ?? 0).getTime() - new Date(left?.time ?? 0).getTime())
+    .slice(0, 250);
+  return nextState;
+}
+
 function normalizePaperBotState(rawState) {
   if (!rawState || typeof rawState !== "object") {
     return null;
@@ -5084,7 +5165,7 @@ function normalizePaperBotState(rawState) {
 function loadPaperBotState() {
   const cloudState = normalizePaperBotState(window.GOLDEN_POCKET_MAX_BOT);
   if (cloudState?.mode === "max_autonomous_cloud") {
-    return cloudState;
+    return applyPaperBotManualOverrides(cloudState);
   }
   try {
     const parsed = JSON.parse(window.localStorage.getItem(PAPER_BOT_STORAGE_KEY) ?? "null");
@@ -5126,7 +5207,7 @@ async function refreshPaperBotCloudState(options = {}) {
       return;
     }
     if (nextState.generatedAt && nextState.generatedAt !== paperBotState.generatedAt) {
-      paperBotState = nextState;
+      paperBotState = applyPaperBotManualOverrides(nextState);
       paperBotMarkPriceCache.clear();
       renderPaperBotPanelForCurrentSelection();
       schedulePaperBotLiveRefresh({ immediate: true });
@@ -5236,12 +5317,14 @@ function getPaperBotSnapshot(selectedCompany = null) {
     const entryPrice = Number(position.entryPrice ?? markPrice);
     const marketValue = shares * markPrice;
     const costBasis = shares * entryPrice;
+    const unrealizedPnl = marketValue - costBasis;
     return {
       ...position,
       markPrice,
       marketValue,
       costBasis,
-      unrealizedPnl: marketValue - costBasis,
+      unrealizedPnl,
+      unrealizedPct: costBasis > 0 ? (unrealizedPnl / costBasis) * 100 : 0,
       markMeta: getPaperBotMarkMeta(position, selectedCompany),
     };
   });
@@ -5402,14 +5485,16 @@ function calculatePaperBotPlan(company, johnView, maxView, decision) {
 }
 
 function addPaperBotTrade(trade) {
+  const nextTrade = {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    time: new Date().toISOString(),
+    ...trade,
+  };
   paperBotState.trades = [
-    {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      time: new Date().toISOString(),
-      ...trade,
-    },
+    nextTrade,
     ...(paperBotState.trades ?? []),
   ].slice(0, 200);
+  return nextTrade;
 }
 
 function storePaperBotEvaluation(company, plan) {
@@ -5463,8 +5548,9 @@ function executePaperBotPlan(company, johnView, maxView, decision, plan) {
   } else if (plan.action === "SELL" && paperBotState.positions[ticker]) {
     const position = paperBotState.positions[ticker];
     const shares = Number(position.shares ?? 0);
+    const entryPrice = Number(position.entryPrice ?? plan.price);
     const value = shares * plan.price;
-    const pnl = (plan.price - Number(position.entryPrice ?? plan.price)) * shares;
+    const pnl = (plan.price - entryPrice) * shares;
     paperBotState.cash += value;
     paperBotState.realizedPnl += pnl;
     delete paperBotState.positions[ticker];
@@ -5472,8 +5558,11 @@ function executePaperBotPlan(company, johnView, maxView, decision, plan) {
       type: "SELL",
       ticker,
       shares,
+      entryPrice,
+      exitPrice: plan.price,
       price: plan.price,
       value,
+      realizedPnl: pnl,
       pnl,
       reason: plan.reason,
     });
@@ -5904,11 +5993,15 @@ function renderPaperBotPanel(company = null, johnView = null, maxView = null, de
               <td>${formatNumber(position.shares, 4)}</td>
               <td>${formatMoney(position.entryPrice)}</td>
               <td>${formatMoney(position.markPrice)}<small>${position.markMeta}</small></td>
-              <td data-tone="${pnlTone}">${formatSignedMoney(position.unrealizedPnl)}</td>
+              <td class="paper-bot-table__open-pnl" data-tone="${pnlTone}">
+                <strong>${formatMoney(position.marketValue)}</strong>
+                <small>${formatSignedMoney(position.unrealizedPnl)} | ${formatPercent(position.unrealizedPct)}</small>
+              </td>
+              <td><button class="paper-bot-close-trade" type="button" data-paper-bot-close-trade="${escapeHtml(position.ticker)}">Close trade</button></td>
             `;
             return row;
           })
-        : [makePaperBotEmptyRow("No open paper positions yet.", 5)]),
+        : [makePaperBotEmptyRow("No open paper positions yet.", 6)]),
     );
   }
   if (paperBotTransactionsCount) {
@@ -5917,6 +6010,78 @@ function renderPaperBotPanel(company = null, johnView = null, maxView = null, de
   if (paperBotTransactionsModal && !paperBotTransactionsModal.hidden) {
     renderPaperBotTransactionsModal();
   }
+}
+
+function openPaperBotCloseConfirm(ticker) {
+  const normalizedTicker = getPaperBotTicker(ticker);
+  const position = paperBotState.positions?.[normalizedTicker];
+  if (!paperBotCloseConfirmModal || !position) {
+    return;
+  }
+  pendingPaperBotCloseTicker = normalizedTicker;
+  const markPrice = getPaperBotMarkPrice(position, companyUniverseByTicker.get(normalizedTicker));
+  const shares = Number(position.shares ?? 0);
+  const value = shares * markPrice;
+  if (paperBotCloseConfirmMessage) {
+    paperBotCloseConfirmMessage.textContent =
+      `Are you sure you want to manually close ${normalizedTicker} at the current mark of ${formatMoney(markPrice)} for an estimated ${formatMoney(value)} trade value?`;
+  }
+  paperBotCloseConfirmModal.hidden = false;
+  paperBotCloseConfirmModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("paper-bot-modal-open");
+  paperBotCloseConfirmCancel?.focus();
+}
+
+function closePaperBotCloseConfirm() {
+  if (!paperBotCloseConfirmModal) {
+    return;
+  }
+  pendingPaperBotCloseTicker = null;
+  paperBotCloseConfirmModal.hidden = true;
+  paperBotCloseConfirmModal.setAttribute("aria-hidden", "true");
+  if (!paperBotTransactionsModal || paperBotTransactionsModal.hidden) {
+    document.body.classList.remove("paper-bot-modal-open");
+  }
+}
+
+function manuallyClosePaperBotTrade(ticker) {
+  const normalizedTicker = getPaperBotTicker(ticker);
+  const position = paperBotState.positions?.[normalizedTicker];
+  if (!position) {
+    closePaperBotCloseConfirm();
+    renderPaperBotPanelForCurrentSelection();
+    return;
+  }
+  const company = companyUniverseByTicker.get(normalizedTicker);
+  const price = getPaperBotMarkPrice(position, company);
+  const shares = Number(position.shares ?? 0);
+  const entryPrice = Number(position.entryPrice ?? price);
+  const value = shares * price;
+  const pnl = (price - entryPrice) * shares;
+  paperBotState.cash = roundPaperBotMoney(Number(paperBotState.cash ?? 0) + value);
+  paperBotState.realizedPnl = roundPaperBotMoney(Number(paperBotState.realizedPnl ?? 0) + pnl);
+  delete paperBotState.positions[normalizedTicker];
+  const recordedTrade = addPaperBotTrade({
+    type: "SELL",
+    ticker: normalizedTicker,
+    shares,
+    entryPrice,
+    exitPrice: price,
+    price,
+    value,
+    realizedPnl: pnl,
+    pnl,
+    manualOverride: true,
+    openedAt: position.openedAt,
+    reason: "Manual override: user closed this paper trade at the current mark.",
+  });
+  if (paperBotState.mode === "max_autonomous_cloud") {
+    rememberPaperBotManualClose(recordedTrade);
+  }
+  savePaperBotState();
+  closePaperBotCloseConfirm();
+  renderPaperBotPanelForCurrentSelection();
+  schedulePaperBotLiveRefresh();
 }
 
 function resetPaperBot() {
@@ -6615,9 +6780,42 @@ if (paperBotTransactionsModal) {
   });
 }
 
+if (paperBotPositions) {
+  paperBotPositions.addEventListener("click", (event) => {
+    const closeButton = event.target?.closest?.("[data-paper-bot-close-trade]");
+    if (!closeButton) {
+      return;
+    }
+    openPaperBotCloseConfirm(closeButton.dataset.paperBotCloseTrade);
+  });
+}
+
+if (paperBotCloseConfirmOk) {
+  paperBotCloseConfirmOk.addEventListener("click", () => {
+    if (pendingPaperBotCloseTicker) {
+      manuallyClosePaperBotTrade(pendingPaperBotCloseTicker);
+    }
+  });
+}
+
+if (paperBotCloseConfirmCancel) {
+  paperBotCloseConfirmCancel.addEventListener("click", closePaperBotCloseConfirm);
+}
+
+if (paperBotCloseConfirmModal) {
+  paperBotCloseConfirmModal.addEventListener("click", (event) => {
+    if (event.target?.matches?.("[data-paper-bot-close-confirm-cancel]")) {
+      closePaperBotCloseConfirm();
+    }
+  });
+}
+
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && paperBotTransactionsModal && !paperBotTransactionsModal.hidden) {
     closePaperBotTransactionsModal();
+  }
+  if (event.key === "Escape" && paperBotCloseConfirmModal && !paperBotCloseConfirmModal.hidden) {
+    closePaperBotCloseConfirm();
   }
 });
 

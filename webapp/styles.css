@@ -1272,6 +1272,12 @@ body::before {
   color: var(--muted);
 }
 
+.paper-bot-button--danger {
+  border-color: rgba(232, 111, 97, 0.72);
+  background: rgba(232, 111, 97, 0.16);
+  color: #ffb1a8;
+}
+
 .paper-bot-overview {
   grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1.2fr);
 }
@@ -1441,6 +1447,40 @@ body::before {
   font-weight: 800;
 }
 
+.paper-bot-table__open-pnl strong {
+  display: block;
+  color: var(--ink);
+}
+
+.paper-bot-table__open-pnl[data-tone="positive"] small {
+  color: var(--accent);
+}
+
+.paper-bot-table__open-pnl[data-tone="negative"] small {
+  color: #e86f61;
+}
+
+.paper-bot-close-trade {
+  border: 1px solid rgba(232, 111, 97, 0.45);
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: rgba(232, 111, 97, 0.1);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.paper-bot-close-trade:hover {
+  transform: translateY(-1px);
+  border-color: rgba(232, 111, 97, 0.78);
+  background: rgba(232, 111, 97, 0.18);
+}
+
 .paper-bot-empty,
 .paper-bot-table__reason {
   color: var(--muted) !important;
@@ -1517,6 +1557,18 @@ body::before {
   justify-content: space-between;
   gap: 18px;
   align-items: start;
+}
+
+.paper-bot-confirm-modal .paper-bot-confirm-modal__dialog {
+  width: min(560px, 100%);
+  min-height: auto;
+  grid-template-rows: auto auto;
+}
+
+.paper-bot-confirm-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .paper-bot-modal .paper-bot-modal__header h2 {

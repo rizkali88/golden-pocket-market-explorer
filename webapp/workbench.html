@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golden Pocket Market Explorer - Working Draft</title>
-    <link rel="stylesheet" href="./styles.css?v=20260514-entry-price-ledger" />
+    <link rel="stylesheet" href="./styles.css?v=20260514-manual-close-pnl" />
   </head>
   <body class="workbench-page">
     <div class="app-shell">
@@ -129,7 +129,8 @@
                         <th>Shares</th>
                         <th>Entry</th>
                         <th>Mark</th>
-                        <th>P/L</th>
+                        <th>Open P&amp;L</th>
+                        <th>Action</th>
                       </tr>
                     </thead>
                     <tbody id="paper-bot-positions"></tbody>
@@ -345,6 +346,23 @@
 
     <aside class="layout-legend" id="layout-legend" hidden aria-live="polite"></aside>
 
+    <div class="paper-bot-modal paper-bot-confirm-modal" id="paper-bot-close-confirm-modal" hidden aria-hidden="true">
+      <div class="paper-bot-modal__backdrop" data-paper-bot-close-confirm-cancel></div>
+      <section class="paper-bot-modal__dialog paper-bot-confirm-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="paper-bot-close-confirm-title">
+        <div class="paper-bot-modal__header">
+          <div>
+            <p class="eyebrow">Manual Override</p>
+            <h2 id="paper-bot-close-confirm-title">Close paper trade?</h2>
+            <p id="paper-bot-close-confirm-message">Are you sure you want to close this open paper trade?</p>
+          </div>
+        </div>
+        <div class="paper-bot-confirm-modal__actions">
+          <button type="button" class="paper-bot-button paper-bot-button--danger" id="paper-bot-close-confirm-ok">OK</button>
+          <button type="button" class="paper-bot-button paper-bot-button--ghost" id="paper-bot-close-confirm-cancel">Cancel</button>
+        </div>
+      </section>
+    </div>
+
     <div class="paper-bot-modal" id="paper-bot-transactions-modal" hidden aria-hidden="true">
       <div class="paper-bot-modal__backdrop" data-paper-bot-modal-close></div>
       <section class="paper-bot-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="paper-bot-transactions-title">
@@ -476,6 +494,7 @@
           const markPrice = getMarkPrice(position);
           const marketValue = shares * markPrice;
           const costBasis = shares * entryPrice;
+          const unrealizedPnl = marketValue - costBasis;
           return {
             ...position,
             ticker: String(position?.ticker ?? ""),
@@ -484,7 +503,8 @@
             entryPrice,
             markPrice,
             marketValue,
-            unrealizedPnl: marketValue - costBasis,
+            unrealizedPnl,
+            unrealizedPct: costBasis > 0 ? (unrealizedPnl / costBasis) * 100 : 0,
           };
         });
         const cash = getNumber(state.cash, startingCash);
@@ -555,11 +575,15 @@
                     <td>${formatNumber(position.shares)}</td>
                     <td>${formatMoney(position.entryPrice)}</td>
                     <td>${formatMoney(position.markPrice)}<small>saved mark</small></td>
-                    <td data-tone="${position.unrealizedPnl >= 0 ? "positive" : "negative"}">${formatSignedMoney(position.unrealizedPnl)}</td>
+                    <td class="paper-bot-table__open-pnl" data-tone="${position.unrealizedPnl >= 0 ? "positive" : "negative"}">
+                      <strong>${formatMoney(position.marketValue)}</strong>
+                      <small>${formatSignedMoney(position.unrealizedPnl)} | ${formatPercent(position.unrealizedPct)}</small>
+                    </td>
+                    <td><button class="paper-bot-close-trade" type="button" data-paper-bot-close-trade="${escapeHtml(position.ticker)}">Close trade</button></td>
                   `;
                   return row;
                 })
-              : [makeEmptyRow("No open paper positions yet.", 5)]),
+              : [makeEmptyRow("No open paper positions yet.", 6)]),
           );
         }
 
@@ -570,7 +594,7 @@
 
     <script>
       (() => {
-        const cacheVersion = "20260514-entry-price-ledger";
+        const cacheVersion = "20260514-manual-close-pnl";
         const liveStateVersion = String(Date.now());
         const dependencyScripts = [
           "./data/market_universe.js",
