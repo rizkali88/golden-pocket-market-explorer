@@ -1044,6 +1044,14 @@ const paperBotReturn = document.querySelector("#paper-bot-return");
 const paperBotMetrics = document.querySelector("#paper-bot-metrics");
 const paperBotInstruction = document.querySelector("#paper-bot-instruction");
 const paperBotReason = document.querySelector("#paper-bot-reason");
+const paperBotHoldingsValue = document.querySelector("#paper-bot-holdings-value");
+const paperBotHoldingsReturn = document.querySelector("#paper-bot-holdings-return");
+const paperBotHoldingsRanges = document.querySelector("#paper-bot-holdings-ranges");
+const paperBotHoldingsChartWrap = document.querySelector("#paper-bot-holdings-chart-wrap");
+const paperBotHoldingsPath = document.querySelector("#paper-bot-holdings-path");
+const paperBotHoldingsFill = document.querySelector("#paper-bot-holdings-fill");
+const paperBotHoldingsDot = document.querySelector("#paper-bot-holdings-dot");
+const paperBotHoldingsEmpty = document.querySelector("#paper-bot-holdings-empty");
 const paperBotLiveStatus = document.querySelector("#paper-bot-live-status");
 const paperBotPositions = document.querySelector("#paper-bot-positions");
 const paperBotPositionCount = document.querySelector("#paper-bot-position-count");
@@ -1129,6 +1137,9 @@ const PAPER_BOT_RISK_FRACTION = 0.01;
 const PAPER_BOT_CLOUD_REFRESH_SECONDS = 60;
 let paperBotState = loadPaperBotState();
 let pendingPaperBotCloseTicker = null;
+let currentPaperBotHoldingsRangeId =
+  window.localStorage.getItem("golden-pocket-paper-bot-holdings-range") || "1m";
+let paperBotHoldingsRenderId = 0;
 
 const MAX_EXECUTION_RANGES = [
   { id: "1d", label: "1D", days: 1 },
@@ -1146,6 +1157,14 @@ const MAX_EXECUTION_RANGES = [
 const MAX_EXECUTION_CHART_TYPES = [
   { id: "line", label: "Line" },
   { id: "candles", label: "Candles" },
+];
+
+const PAPER_BOT_HOLDINGS_RANGES = [
+  { id: "1w", label: "1W", days: 7 },
+  { id: "1m", label: "1M", days: 31 },
+  { id: "3m", label: "3M", days: 93 },
+  { id: "1y", label: "1Y", days: 370 },
+  { id: "all", label: "All" },
 ];
 
 const MAX_EXECUTION_INTERVALS = [
@@ -1610,6 +1629,219 @@ async function getCompanyPriceHistory(company) {
   }
   await loadHistoryChunk(historyLocation.chunkKey, historyLocation.fileName);
   return window.GOLDEN_POCKET_HISTORY_CHUNKS?.[historyLocation.chunkKey]?.[company.ticker] ?? null;
+}
+
+function getSelectedPaperBotHoldingsRange() {
+  return (
+    PAPER_BOT_HOLDINGS_RANGES.find((range) => range.id === currentPaperBotHoldingsRangeId) ??
+    PAPER_BOT_HOLDINGS_RANGES.find((range) => range.id === "1m")
+  );
+}
+
+function renderPaperBotHoldingsRangeSwitcher() {
+  if (!paperBotHoldingsRanges) {
+    return;
+  }
+  const selectedRange = getSelectedPaperBotHoldingsRange();
+  paperBotHoldingsRanges.replaceChildren(
+    ...PAPER_BOT_HOLDINGS_RANGES.map((range) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "holdings-chart__range";
+      button.classList.toggle("is-active", range.id === selectedRange.id);
+      button.textContent = range.label;
+      button.setAttribute("aria-pressed", String(range.id === selectedRange.id));
+      button.addEventListener("click", () => {
+        currentPaperBotHoldingsRangeId = range.id;
+        window.localStorage.setItem("golden-pocket-paper-bot-holdings-range", range.id);
+        renderPaperBotPanelForCurrentSelection();
+      });
+      return button;
+    }),
+  );
+}
+
+function getPaperBotHistoryPoints(history) {
+  const times = Array.isArray(history?.t) ? history.t : [];
+  const closes = Array.isArray(history?.c) ? history.c : [];
+  return times
+    .map((time, index) => ({
+      time: Number(time),
+      close: Number(closes[index]),
+    }))
+    .filter((point) => Number.isFinite(point.time) && Number.isFinite(point.close) && point.close > 0)
+    .sort((left, right) => left.time - right.time);
+}
+
+function makeFallbackPaperBotHoldingsSeries(snapshot) {
+  const costBasis = snapshot.positions.reduce((sum, position) => sum + Number(position.costBasis ?? 0), 0);
+  const currentValue = snapshot.openValue;
+  const now = Math.floor(Date.now() / 1000);
+  const range = getSelectedPaperBotHoldingsRange();
+  const startTime = range.days ? now - range.days * 86_400 : now - 31 * 86_400;
+  const points = Array.from({ length: 8 }, (_, index) => {
+    const ratio = index / 7;
+    return {
+      time: Math.round(startTime + (now - startTime) * ratio),
+      value: costBasis + (currentValue - costBasis) * ratio,
+    };
+  });
+  return points;
+}
+
+async function buildPaperBotHoldingsSeries(snapshot) {
+  if (!snapshot.positions.length) {
+    return [];
+  }
+  const range = getSelectedPaperBotHoldingsRange();
+  const now = Math.floor(Date.now() / 1000);
+  const startTime = range.days ? now - range.days * 86_400 : 0;
+  const historySets = await Promise.all(
+    snapshot.positions.map(async (position) => {
+      const ticker = getPaperBotTicker(position);
+      const company = companyUniverseByTicker.get(ticker) ?? { ticker };
+      try {
+        const history = await getCompanyPriceHistory(company);
+        const points = getPaperBotHistoryPoints(history);
+        if (position.markPrice > 0) {
+          points.push({ time: now, close: Number(position.markPrice) });
+        }
+        return {
+          position,
+          points: points.filter((point) => !startTime || point.time >= startTime).sort((left, right) => left.time - right.time),
+        };
+      } catch (error) {
+        return { position, points: [] };
+      }
+    }),
+  );
+
+  const usefulHistorySets = historySets.filter((set) => set.points.length > 1);
+  if (!usefulHistorySets.length) {
+    return makeFallbackPaperBotHoldingsSeries(snapshot);
+  }
+
+  const times = [...new Set(usefulHistorySets.flatMap((set) => set.points.map((point) => point.time)))].sort(
+    (left, right) => left - right,
+  );
+  if (times.length < 2) {
+    return makeFallbackPaperBotHoldingsSeries(snapshot);
+  }
+
+  const cursors = new Map(usefulHistorySets.map((set) => [getPaperBotTicker(set.position), 0]));
+  return times.map((time) => {
+    const value = snapshot.positions.reduce((sum, position) => {
+      const ticker = getPaperBotTicker(position);
+      const historySet = usefulHistorySets.find((set) => getPaperBotTicker(set.position) === ticker);
+      if (!historySet) {
+        return sum + Number(position.marketValue ?? 0);
+      }
+      let cursor = cursors.get(ticker) ?? 0;
+      while (cursor + 1 < historySet.points.length && historySet.points[cursor + 1].time <= time) {
+        cursor += 1;
+      }
+      cursors.set(ticker, cursor);
+      const close = Number(historySet.points[cursor]?.close ?? position.markPrice ?? position.entryPrice ?? 0);
+      return sum + close * Number(position.shares ?? 0);
+    }, 0);
+    return { time, value };
+  });
+}
+
+function makeSmoothSvgPath(points) {
+  if (!points.length) {
+    return "";
+  }
+  return points.reduce((path, point, index) => {
+    if (index === 0) {
+      return `M${point.x.toFixed(2)} ${point.y.toFixed(2)}`;
+    }
+    const previous = points[index - 1];
+    const controlOffset = (point.x - previous.x) * 0.5;
+    return `${path} C${(previous.x + controlOffset).toFixed(2)} ${previous.y.toFixed(2)} ${(point.x - controlOffset).toFixed(2)} ${point.y.toFixed(2)} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`;
+  }, "");
+}
+
+function renderPaperBotHoldingsSvg(series, snapshot) {
+  if (!paperBotHoldingsPath || !paperBotHoldingsFill || !paperBotHoldingsDot || !paperBotHoldingsEmpty) {
+    return;
+  }
+  if (!snapshot.positions.length || series.length < 2) {
+    paperBotHoldingsPath.removeAttribute("d");
+    paperBotHoldingsFill.removeAttribute("d");
+    paperBotHoldingsDot.removeAttribute("cx");
+    paperBotHoldingsDot.removeAttribute("cy");
+    paperBotHoldingsEmpty.hidden = false;
+    return;
+  }
+
+  const values = series.map((point) => Number(point.value)).filter(Number.isFinite);
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const padding = Math.max((maxValue - minValue) * 0.18, Math.max(maxValue, 1) * 0.01);
+  const min = minValue - padding;
+  const max = maxValue + padding;
+  const width = 420;
+  const height = 170;
+  const left = 14;
+  const right = 406;
+  const top = 18;
+  const bottom = 150;
+  const valueRange = Math.max(max - min, 1);
+  const points = series.map((point, index) => ({
+    x: left + (index / Math.max(series.length - 1, 1)) * (right - left),
+    y: bottom - ((Number(point.value) - min) / valueRange) * (bottom - top),
+  }));
+  const linePath = makeSmoothSvgPath(points);
+  const firstPoint = points[0];
+  const lastPoint = points.at(-1);
+  paperBotHoldingsPath.setAttribute("d", linePath);
+  paperBotHoldingsFill.setAttribute(
+    "d",
+    `${linePath} L${lastPoint.x.toFixed(2)} ${bottom} L${firstPoint.x.toFixed(2)} ${bottom} Z`,
+  );
+  paperBotHoldingsDot.setAttribute("cx", lastPoint.x.toFixed(2));
+  paperBotHoldingsDot.setAttribute("cy", lastPoint.y.toFixed(2));
+  paperBotHoldingsEmpty.hidden = true;
+}
+
+function renderPaperBotHoldingsChart(snapshot) {
+  renderPaperBotHoldingsRangeSwitcher();
+  const costBasis = snapshot.positions.reduce((sum, position) => sum + Number(position.costBasis ?? 0), 0);
+  const pnlTone = snapshot.unrealizedPnl >= 0 ? "positive" : "negative";
+  if (paperBotHoldingsValue) {
+    paperBotHoldingsValue.textContent = formatMoney(snapshot.openValue);
+  }
+  if (paperBotHoldingsReturn) {
+    paperBotHoldingsReturn.textContent = `${formatSignedMoney(snapshot.unrealizedPnl)} | ${formatPercent(
+      costBasis > 0 ? (snapshot.unrealizedPnl / costBasis) * 100 : 0,
+    )}`;
+    paperBotHoldingsReturn.dataset.tone = pnlTone;
+  }
+  if (paperBotHoldingsChartWrap) {
+    paperBotHoldingsChartWrap.dataset.tone = pnlTone;
+    paperBotHoldingsChartWrap.classList.toggle("is-loading", snapshot.positions.length > 0);
+  }
+
+  const renderId = ++paperBotHoldingsRenderId;
+  buildPaperBotHoldingsSeries(snapshot)
+    .then((series) => {
+      if (renderId !== paperBotHoldingsRenderId) {
+        return;
+      }
+      renderPaperBotHoldingsSvg(series, snapshot);
+    })
+    .catch(() => {
+      if (renderId !== paperBotHoldingsRenderId) {
+        return;
+      }
+      renderPaperBotHoldingsSvg(makeFallbackPaperBotHoldingsSeries(snapshot), snapshot);
+    })
+    .finally(() => {
+      if (renderId === paperBotHoldingsRenderId && paperBotHoldingsChartWrap) {
+        paperBotHoldingsChartWrap.classList.remove("is-loading");
+      }
+    });
 }
 
 function getSelectedMaxExecutionInterval() {
@@ -5963,6 +6195,7 @@ function renderPaperBotPanel(company = null, johnView = null, maxView = null, de
     makePaperBotMetric("Open P/L", formatSignedMoney(snapshot.unrealizedPnl), openTone),
     makePaperBotMetric("Realized P/L", formatSignedMoney(snapshot.realizedPnl), realizedTone),
   );
+  renderPaperBotHoldingsChart(snapshot);
 
   if (paperBotInstruction) {
     paperBotInstruction.textContent = activePlan.label;

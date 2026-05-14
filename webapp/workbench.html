@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golden Pocket Market Explorer - Working Draft</title>
-    <link rel="stylesheet" href="./styles.css?v=20260514-manual-close-pnl" />
+    <link rel="stylesheet" href="./styles.css?v=20260514-holdings-chart" />
   </head>
   <body class="workbench-page">
     <div class="app-shell">
@@ -108,10 +108,29 @@
                 <small id="paper-bot-return">0.00% total return</small>
                 <div class="paper-bot-metrics" id="paper-bot-metrics"></div>
               </article>
-              <article class="paper-bot-card paper-bot-card--instruction">
-                <span>Current instruction</span>
-                <strong id="paper-bot-instruction">Awaiting ticker</strong>
-                <small id="paper-bot-reason">Waiting for Max's cloud paper bot state.</small>
+              <article class="paper-bot-card paper-bot-card--holdings-chart">
+                <div class="holdings-chart__header">
+                  <div>
+                    <span>Holdings value</span>
+                    <strong id="paper-bot-holdings-value">$0.00</strong>
+                    <small id="paper-bot-holdings-return">$0.00 | 0.00%</small>
+                  </div>
+                  <div class="holdings-chart__ranges" id="paper-bot-holdings-ranges" aria-label="Holdings chart range"></div>
+                </div>
+                <div class="holdings-chart__canvas" id="paper-bot-holdings-chart-wrap">
+                  <svg id="paper-bot-holdings-chart" viewBox="0 0 420 170" role="img" aria-label="Open holdings value chart" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="holdings-chart-fill-gradient" x1="0" x2="0" y1="0" y2="1">
+                        <stop offset="0%" stop-color="currentColor" stop-opacity="0.26" />
+                        <stop offset="100%" stop-color="currentColor" stop-opacity="0" />
+                      </linearGradient>
+                    </defs>
+                    <path class="holdings-chart__fill" id="paper-bot-holdings-fill"></path>
+                    <path class="holdings-chart__line" id="paper-bot-holdings-path"></path>
+                    <circle class="holdings-chart__last-dot" id="paper-bot-holdings-dot" r="4"></circle>
+                  </svg>
+                  <p class="holdings-chart__empty" id="paper-bot-holdings-empty" hidden>No open holdings to chart yet.</p>
+                </div>
               </article>
             </div>
 
@@ -524,6 +543,44 @@
 
         setText("#paper-bot-equity", formatMoney(equity));
         setText("#paper-bot-return", `${formatPercent(returnPct)} total return`);
+        setText("#paper-bot-holdings-value", formatMoney(openValue));
+        setText(
+          "#paper-bot-holdings-return",
+          `${formatSignedMoney(unrealizedPnl)} | ${formatPercent(openValue - unrealizedPnl > 0 ? (unrealizedPnl / (openValue - unrealizedPnl)) * 100 : 0)}`,
+        );
+        const holdingsChart = document.querySelector("#paper-bot-holdings-chart");
+        const holdingsPath = document.querySelector("#paper-bot-holdings-path");
+        const holdingsFill = document.querySelector("#paper-bot-holdings-fill");
+        const holdingsDot = document.querySelector("#paper-bot-holdings-dot");
+        const holdingsEmpty = document.querySelector("#paper-bot-holdings-empty");
+        if (holdingsChart && holdingsPath && holdingsFill && holdingsDot && holdingsEmpty) {
+          const startValue = positions.reduce((sum, position) => sum + position.shares * position.entryPrice, 0);
+          const endValue = openValue;
+          if (positions.length) {
+            const values = [startValue, startValue * 0.998 + endValue * 0.002, startValue * 0.35 + endValue * 0.65, endValue];
+            const min = Math.min(...values);
+            const max = Math.max(...values);
+            const range = Math.max(max - min, Math.max(endValue, 1) * 0.02);
+            const points = values.map((value, index) => {
+              const x = 18 + (index / Math.max(values.length - 1, 1)) * 384;
+              const y = 142 - ((value - min) / range) * 112;
+              return [x, y];
+            });
+            const d = points.reduce((path, point, index) => `${path}${index ? " L" : "M"}${point[0].toFixed(2)} ${point[1].toFixed(2)}`, "");
+            holdingsPath.setAttribute("d", d);
+            holdingsFill.setAttribute("d", `${d} L402 154 L18 154 Z`);
+            holdingsDot.setAttribute("cx", points.at(-1)[0].toFixed(2));
+            holdingsDot.setAttribute("cy", points.at(-1)[1].toFixed(2));
+            holdingsChart.parentElement.dataset.tone = unrealizedPnl >= 0 ? "positive" : "negative";
+            holdingsEmpty.hidden = true;
+          } else {
+            holdingsPath.removeAttribute("d");
+            holdingsFill.removeAttribute("d");
+            holdingsDot.removeAttribute("cx");
+            holdingsDot.removeAttribute("cy");
+            holdingsEmpty.hidden = false;
+          }
+        }
         const metrics = document.querySelector("#paper-bot-metrics");
         metrics?.replaceChildren(
           makeMetric("Cash", formatMoney(cash)),
@@ -594,7 +651,7 @@
 
     <script>
       (() => {
-        const cacheVersion = "20260514-manual-close-pnl";
+        const cacheVersion = "20260514-holdings-chart";
         const liveStateVersion = String(Date.now());
         const dependencyScripts = [
           "./data/market_universe.js",
