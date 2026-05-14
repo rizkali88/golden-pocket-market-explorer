@@ -2330,20 +2330,6 @@ function buildBaseMaxExecutionMarkers(lastTime, levels, palette) {
       shape: "circle",
       text: "Current",
     },
-    {
-      time: lastTime,
-      position: levels.price <= levels.entryHigh ? "belowBar" : "aboveBar",
-      color: palette.entry,
-      shape: "arrowUp",
-      text: "Entry zone",
-    },
-    {
-      time: lastTime,
-      position: "aboveBar",
-      color: palette.target,
-      shape: "arrowUp",
-      text: "TP ladder",
-    },
   ];
 }
 
