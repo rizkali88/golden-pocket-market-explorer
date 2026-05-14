@@ -4,6 +4,7 @@ import argparse
 import json
 import math
 import os
+import re
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,8 +19,10 @@ RISK_FRACTION = 0.01
 DEFAULT_MAX_OPEN_POSITIONS = 8
 MIN_ENTRY_PRICE = 5.0
 MIN_AVG_DAILY_DOLLAR_VOLUME = 5_000_000.0
-DEFAULT_QUOTE_CANDIDATE_LIMIT = 250
+DEFAULT_QUOTE_CANDIDATE_LIMIT = 500
 DEFAULT_QUOTE_BATCH_SIZE = 100
+DEFAULT_HISTORY_RANGE_SECONDS = 370 * 24 * 60 * 60
+DEFAULT_BOT_FRAME_LABEL = "1Y / 1D"
 FMP_STABLE_BASE_URL = "https://financialmodelingprep.com/stable"
 PRIMARY_EXCHANGES = {"NYSE", "NASDAQ", "NASDAQ CAPITAL MARKET", "NYSE AMERICAN", "NYSE ARCA"}
 
@@ -149,6 +152,10 @@ def apply_live_quotes(
 
 
 def liquidity_score(profile: dict[str, Any]) -> float:
+    dollar_volume = number(profile.get("avgDailyDollarVolume"), 0.0) or 0.0
+    if dollar_volume > 0:
+        return clamp(25 + math.log10(max(dollar_volume, 1.0)) * 8)
+
     bucket = str(profile.get("liquidityBucket") or "").lower()
     if "high" in bucket:
         return 90.0
@@ -156,13 +163,6 @@ def liquidity_score(profile: dict[str, Any]) -> float:
         return 68.0
     if "low" in bucket:
         return 42.0
-    dollar_volume = number(profile.get("avgDailyDollarVolume"), 0.0) or 0.0
-    if dollar_volume >= 50_000_000:
-        return 90.0
-    if dollar_volume >= 10_000_000:
-        return 72.0
-    if dollar_volume >= 2_000_000:
-        return 55.0
     return 38.0
 
 
@@ -209,8 +209,367 @@ def build_trade_levels(profile: dict[str, Any]) -> dict[str, float] | None:
     }
 
 
-def max_signal(profile: dict[str, Any]) -> dict[str, Any]:
-    levels = build_trade_levels(profile)
+def parse_json_assignment(path: Path) -> dict[str, Any]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}
+    match = re.search(r"=\s*(\{.*\});?\s*$", text, flags=re.DOTALL)
+    if not match:
+        return {}
+    try:
+        parsed = json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def load_history_by_ticker(history_dir: Path, tickers: list[str]) -> dict[str, dict[str, Any]]:
+    index_payload = parse_json_assignment(history_dir / "index.js")
+    chunks = index_payload.get("chunks") if isinstance(index_payload.get("chunks"), dict) else {}
+    chunk_files = index_payload.get("chunkFiles") if isinstance(index_payload.get("chunkFiles"), dict) else {}
+    if not chunks:
+        return {}
+
+    symbols_by_chunk: dict[str, list[str]] = {}
+    for ticker in tickers:
+        symbol = str(ticker or "").upper().strip()
+        chunk_key = str(chunks.get(symbol) or "")
+        if symbol and chunk_key:
+            symbols_by_chunk.setdefault(chunk_key, []).append(symbol)
+
+    history_by_ticker: dict[str, dict[str, Any]] = {}
+    for chunk_key, symbols in symbols_by_chunk.items():
+        chunk_file = str(chunk_files.get(chunk_key) or f"{chunk_key}.js")
+        chunk_payload = parse_json_assignment(history_dir / chunk_file)
+        if not chunk_payload:
+            continue
+        for symbol in symbols:
+            history = chunk_payload.get(symbol)
+            if isinstance(history, dict) and isinstance(history.get("t"), list) and isinstance(history.get("c"), list):
+                history_by_ticker[symbol] = history
+    return history_by_ticker
+
+
+def parse_timestamp(value: Any) -> int | None:
+    if value is None:
+        return None
+    parsed_number = number(value, None)
+    if parsed_number is not None:
+        return int(parsed_number)
+    try:
+        normalized = str(value).replace("Z", "+00:00")
+        return int(datetime.fromisoformat(normalized).timestamp())
+    except ValueError:
+        return None
+
+
+def history_points_for_default_frame(
+    history: dict[str, Any] | None,
+    profile: dict[str, Any],
+    *,
+    range_seconds: int = DEFAULT_HISTORY_RANGE_SECONDS,
+) -> list[dict[str, float]]:
+    if not history:
+        return []
+
+    times = history.get("t") if isinstance(history.get("t"), list) else []
+    closes = history.get("c") if isinstance(history.get("c"), list) else []
+    opens = history.get("o") if isinstance(history.get("o"), list) else []
+    highs = history.get("h") if isinstance(history.get("h"), list) else []
+    lows = history.get("l") if isinstance(history.get("l"), list) else []
+    has_ohlc = len(opens) == len(times) and len(highs) == len(times) and len(lows) == len(times)
+
+    points: list[dict[str, float]] = []
+    for index, raw_time in enumerate(times[: len(closes)]):
+        timestamp = number(raw_time, None)
+        close = number(closes[index], None)
+        if timestamp is None or close is None:
+            continue
+        point: dict[str, float] = {"time": float(timestamp), "value": close, "close": close}
+        if has_ohlc:
+            open_price = number(opens[index], close)
+            high = number(highs[index], close)
+            low = number(lows[index], close)
+            if open_price is not None and high is not None and low is not None:
+                point.update({"open": open_price, "high": high, "low": low})
+        points.append(point)
+
+    if len(points) < 3:
+        return points
+
+    last_time = points[-1]["time"]
+    start_time = last_time - range_seconds
+    frame_points = [point for point in points if point["time"] >= start_time]
+
+    live_price = number(profile.get("livePrice"), None)
+    if live_price is None or live_price <= 0 or not frame_points:
+        return frame_points
+
+    fetched_at = parse_timestamp(profile.get("livePriceUpdatedAt")) or int(datetime.now(UTC).timestamp())
+    last_point = frame_points[-1]
+    same_daily_bar = datetime.fromtimestamp(last_point["time"], UTC).date() == datetime.fromtimestamp(
+        fetched_at, UTC
+    ).date()
+    if same_daily_bar or fetched_at - int(last_point["time"]) < 6 * 60 * 60:
+        last_point["value"] = live_price
+        last_point["close"] = live_price
+        if "high" in last_point:
+            last_point["high"] = max(number(last_point.get("high"), live_price) or live_price, live_price)
+        if "low" in last_point:
+            last_point["low"] = min(number(last_point.get("low"), live_price) or live_price, live_price)
+        return frame_points
+
+    live_point: dict[str, float] = {"time": float(fetched_at), "value": live_price, "close": live_price}
+    if all(key in last_point for key in ("open", "high", "low")):
+        live_point.update({"open": live_price, "high": live_price, "low": live_price})
+    frame_points.append(live_point)
+    return frame_points
+
+
+def point_close(point: dict[str, Any] | None) -> float | None:
+    if not point:
+        return None
+    return number(point.get("close", point.get("value")), None)
+
+
+def point_high(point: dict[str, Any] | None) -> float | None:
+    if not point:
+        return None
+    return number(point.get("high", point_close(point)), None)
+
+
+def point_low(point: dict[str, Any] | None) -> float | None:
+    if not point:
+        return None
+    return number(point.get("low", point_close(point)), None)
+
+
+def find_extreme_point(
+    data: list[dict[str, float]],
+    getter,
+    comparator,
+) -> dict[str, float] | None:
+    best: dict[str, float] | None = None
+    best_value: float | None = None
+    for point in data:
+        value = getter(point)
+        if value is None:
+            continue
+        if best is None or best_value is None or comparator(value, best_value):
+            best = point
+            best_value = value
+    return best
+
+
+def find_max_execution_pivots(data: list[dict[str, float]]) -> list[dict[str, Any]]:
+    if len(data) < 5:
+        return []
+    lookaround = int(clamp(math.floor(len(data) / 36), 2, 8))
+    pivots: list[dict[str, Any]] = []
+    for index in range(lookaround, len(data) - lookaround):
+        point = data[index]
+        high = point_high(point)
+        low = point_low(point)
+        if high is None or low is None:
+            continue
+        window = data[index - lookaround : index + lookaround + 1]
+        is_high = all(high >= (point_high(candidate) if point_high(candidate) is not None else -math.inf) for candidate in window)
+        is_low = all(low <= (point_low(candidate) if point_low(candidate) is not None else math.inf) for candidate in window)
+        if is_high:
+            pivots.append({"type": "high", "point": point, "time": point["time"], "price": high})
+        if is_low:
+            pivots.append({"type": "low", "point": point, "time": point["time"], "price": low})
+    pivots.sort(key=lambda item: number(item.get("time"), 0.0) or 0.0)
+    deduped: list[dict[str, Any]] = []
+    for pivot in pivots:
+        previous = deduped[-1] if deduped else None
+        if not previous or previous.get("time") != pivot.get("time") or previous.get("type") != pivot.get("type"):
+            deduped.append(pivot)
+    return deduped
+
+
+def compress_alternating_pivots(pivots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    compressed: list[dict[str, Any]] = []
+    for pivot in pivots:
+        previous = compressed[-1] if compressed else None
+        if not previous or previous.get("type") != pivot.get("type"):
+            compressed.append(pivot)
+            continue
+        more_extreme = pivot["price"] >= previous["price"] if pivot.get("type") == "high" else pivot["price"] <= previous["price"]
+        if more_extreme:
+            compressed[-1] = pivot
+    return compressed
+
+
+def build_execution_structure(
+    data: list[dict[str, float]],
+    fallback_levels: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    clean_data = [point for point in data if point.get("time") and point_close(point) is not None]
+    if len(clean_data) < 3:
+        return None
+
+    first_close = point_close(clean_data[0]) or number((fallback_levels or {}).get("price"), 0.0) or 0.0
+    last_close = point_close(clean_data[-1]) or first_close
+    return_pct = ((last_close - first_close) / first_close) * 100 if first_close > 0 else 0.0
+    if return_pct >= 2:
+        trend = "up"
+    elif return_pct <= -2:
+        trend = "down"
+    else:
+        trend = "neutral-up" if last_close >= first_close else "neutral-down"
+    direction = "down" if "down" in trend else "up"
+
+    pivots = compress_alternating_pivots(find_max_execution_pivots(clean_data))
+    recent_data = clean_data[-min(120, len(clean_data)) :]
+    high_point = find_extreme_point(recent_data, point_high, lambda left, right: left > right)
+    low_point = find_extreme_point(recent_data, point_low, lambda left, right: left < right)
+    anchor_low = low_point
+    anchor_high = high_point
+
+    if direction == "up":
+        highest_pivot = next((pivot for pivot in reversed(pivots) if pivot.get("type") == "high"), None)
+        if not highest_pivot and anchor_high:
+            highest_pivot = {
+                "type": "high",
+                "point": anchor_high,
+                "time": anchor_high["time"],
+                "price": point_high(anchor_high),
+            }
+        low_before_high = (
+            next(
+                (
+                    pivot
+                    for pivot in reversed(pivots)
+                    if pivot.get("type") == "low"
+                    and highest_pivot
+                    and number(pivot.get("time"), 0.0) < number(highest_pivot.get("time"), 0.0)
+                ),
+                None,
+            )
+            if highest_pivot
+            else None
+        )
+        anchor_high = (highest_pivot or {}).get("point") or anchor_high
+        anchor_low = (low_before_high or {}).get("point") or anchor_low
+    else:
+        lowest_pivot = next((pivot for pivot in reversed(pivots) if pivot.get("type") == "low"), None)
+        if not lowest_pivot and anchor_low:
+            lowest_pivot = {
+                "type": "low",
+                "point": anchor_low,
+                "time": anchor_low["time"],
+                "price": point_low(anchor_low),
+            }
+        high_before_low = (
+            next(
+                (
+                    pivot
+                    for pivot in reversed(pivots)
+                    if pivot.get("type") == "high"
+                    and lowest_pivot
+                    and number(pivot.get("time"), 0.0) < number(lowest_pivot.get("time"), 0.0)
+                ),
+                None,
+            )
+            if lowest_pivot
+            else None
+        )
+        anchor_low = (lowest_pivot or {}).get("point") or anchor_low
+        anchor_high = (high_before_low or {}).get("point") or anchor_high
+
+    anchor_low_price = point_low(anchor_low) or number((fallback_levels or {}).get("low"), None)
+    anchor_high_price = point_high(anchor_high) or number((fallback_levels or {}).get("high"), None)
+    if anchor_low_price is None or anchor_high_price is None:
+        return None
+    low = min(anchor_low_price, anchor_high_price)
+    high = max(anchor_low_price, anchor_high_price)
+    price_range = max(high - low, abs(last_close) * 0.01, 0.01)
+
+    return {
+        "trend": trend,
+        "direction": direction,
+        "firstClose": first_close,
+        "lastClose": last_close,
+        "returnPct": return_pct,
+        "low": low,
+        "high": high,
+        "range": price_range,
+    }
+
+
+def build_dynamic_trade_levels(
+    base_levels: dict[str, Any] | None,
+    structure: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not base_levels or not structure or not structure.get("range"):
+        return base_levels
+
+    price = number(base_levels.get("price"), None)
+    low = number(structure.get("low"), None)
+    high = number(structure.get("high"), None)
+    price_range = number(structure.get("range"), None)
+    if price is None or low is None or high is None or price_range is None or price_range <= 0:
+        return base_levels
+
+    bullish = structure.get("direction") == "up"
+    entry_low = high - price_range * 0.618 if bullish else low + price_range * 0.382
+    entry_high = high - price_range * 0.382 if bullish else low + price_range * 0.618
+    add_low = high - price_range * 0.786 if bullish else low + price_range * 0.236
+    add_high = entry_low
+    stop = max(0.01, low - price_range * 0.08)
+    target1 = high if bullish else low + price_range * 0.786
+    target2 = high + price_range * 0.272 if bullish else high
+    target3 = high + price_range * 0.618 if bullish else high + price_range * 0.272
+    normalized_entry_low = min(entry_low, entry_high)
+    normalized_entry_high = max(entry_low, entry_high)
+    entry_mid = (normalized_entry_low + normalized_entry_high) / 2
+    reward_risk = (target2 - entry_mid) / max(entry_mid - stop, price * 0.01)
+    if normalized_entry_low <= price <= normalized_entry_high:
+        position = "Inside selected-frame entry zone"
+    elif price > normalized_entry_high:
+        position = "Above selected-frame entry"
+    else:
+        position = "Below selected-frame entry"
+
+    return {
+        **base_levels,
+        "low": round(low, 4),
+        "high": round(high, 4),
+        "entryLow": round(normalized_entry_low, 4),
+        "entryHigh": round(normalized_entry_high, 4),
+        "addLow": round(min(add_low, add_high), 4),
+        "addHigh": round(max(add_low, add_high), 4),
+        "stop": round(stop, 4),
+        "target1": round(target1, 4),
+        "target2": round(target2, 4),
+        "target3": round(target3, 4),
+        "rewardRisk": round(reward_risk, 4),
+        "position": position,
+        "sourceFrame": DEFAULT_BOT_FRAME_LABEL,
+    }
+
+
+def build_frame_trade_levels(
+    profile: dict[str, Any],
+    base_levels: dict[str, Any] | None,
+    history: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not base_levels or not history:
+        return base_levels
+    points = history_points_for_default_frame(history, profile)
+    structure = build_execution_structure(points, base_levels)
+    return build_dynamic_trade_levels(base_levels, structure)
+
+
+def position_is_above_entry(levels: dict[str, Any] | None) -> bool:
+    return "above" in str((levels or {}).get("position") or "").lower()
+
+
+def max_signal(profile: dict[str, Any], history: dict[str, Any] | None = None) -> dict[str, Any]:
+    base_levels = build_trade_levels(profile)
+    levels = build_frame_trade_levels(profile, base_levels, history)
     trend_score = score_by_label(profile, ("trend",), number(profile.get("researchConfidence"), 58.0) or 58.0)
     rebound_score = score_by_label(profile, ("rebound",), number(profile.get("researchConfidence"), 54.0) or 54.0)
     risk_score = score_by_label(profile, ("risk",), number(profile.get("researchConfidence"), 54.0) or 54.0)
@@ -234,7 +593,7 @@ def max_signal(profile: dict[str, Any]) -> dict[str, Any]:
     is_extended = range_position >= 86
     verdict = (
         "Enter"
-        if total_score >= 70 and not is_extended and levels and levels.get("position") != "Above preferred entry"
+        if total_score >= 70 and not is_extended and levels and not position_is_above_entry(levels)
         else "Wait"
         if total_score >= 54
         else "Avoid"
@@ -251,6 +610,7 @@ def max_signal(profile: dict[str, Any]) -> dict[str, Any]:
         "liquidityScore": round(liquidity_score(profile)),
         "entryTimingScore": round(entry_timing_score),
         "rewardRiskScore": round(reward_risk_score),
+        "frame": (levels or {}).get("sourceFrame") or "52-week profile",
     }
 
 
@@ -294,6 +654,7 @@ def choose_quote_symbols(
     state: dict[str, Any],
     *,
     candidate_limit: int = DEFAULT_QUOTE_CANDIDATE_LIMIT,
+    history_by_ticker: dict[str, dict[str, Any]] | None = None,
 ) -> list[str]:
     ready_profiles = [profile for profile in profiles if is_research_ready(profile)]
     open_tickers = {str(ticker).upper() for ticker in state.get("positions", {})}
@@ -302,9 +663,8 @@ def choose_quote_symbols(
         ticker = str(profile.get("ticker") or "").upper()
         if not ticker or ticker in open_tickers or not is_tradable_for_new_entry(profile):
             continue
-        signal = max_signal(profile)
-        if should_open(signal, open_tickers):
-            candidate_signals.append(signal)
+        signal = max_signal(profile, (history_by_ticker or {}).get(ticker))
+        candidate_signals.append(signal)
     ranked_candidates = sorted(
         candidate_signals,
         key=lambda item: (
@@ -351,6 +711,119 @@ def should_open(signal: dict[str, Any], open_tickers: set[str]) -> bool:
     )
 
 
+def new_entry_block_reason(profile: dict[str, Any]) -> str:
+    exchange = str(profile.get("exchange") or "unknown").upper()
+    price = number(profile.get("price"), 0.0) or 0.0
+    dollar_volume = number(profile.get("avgDailyDollarVolume"), 0.0) or 0.0
+    if not is_research_ready(profile):
+        return "Directory-only profile; Max needs price, targets, and research data before paper trading."
+    if exchange not in PRIMARY_EXCHANGES:
+        return f"Exchange {exchange or 'unknown'} is outside Max's current US primary-exchange rule."
+    if price < MIN_ENTRY_PRICE:
+        return f"Price ${price:.2f} is below Max's ${MIN_ENTRY_PRICE:.2f} minimum trade price."
+    if dollar_volume < MIN_AVG_DAILY_DOLLAR_VOLUME:
+        return (
+            f"Average dollar volume ${dollar_volume:,.0f} is below Max's "
+            f"${MIN_AVG_DAILY_DOLLAR_VOLUME:,.0f} liquidity floor."
+        )
+    return "Ticker is not eligible for a fresh Max paper entry under current guardrails."
+
+
+def build_bot_evaluation(
+    profile: dict[str, Any],
+    signal: dict[str, Any],
+    *,
+    generated_at: str,
+    new_entry_tickers: set[str],
+    open_tickers: set[str],
+    max_open_positions: int,
+    candidate_rank: int | None = None,
+    sizing_rejected: bool = False,
+) -> dict[str, Any]:
+    ticker = str(signal.get("ticker") or profile.get("ticker") or "").upper()
+    levels = signal.get("levels") or {}
+    score = number(signal.get("score"), 0.0) or 0.0
+    verdict = str(signal.get("verdict") or "Wait")
+    price = number(levels.get("price"), None)
+    entry_high = number(levels.get("entryHigh"), None)
+    frame = str(signal.get("frame") or (levels or {}).get("sourceFrame") or "52-week profile")
+
+    action = "WAIT"
+    label = f"Technical {verdict}"
+    reason = f"Max {verdict} with {round(score)}/100 technical conviction."
+    eligible = False
+    rejection_code = "WAITING"
+
+    if ticker in open_tickers:
+        action = "HOLD"
+        label = "Held"
+        reason = f"Open paper position; managing stop and targets from {frame}."
+        eligible = True
+        rejection_code = None
+    elif ticker not in new_entry_tickers:
+        action = "REJECTED"
+        label = "Not tradable"
+        reason = new_entry_block_reason(profile)
+        rejection_code = "NOT_TRADABLE"
+    elif not levels:
+        action = "REJECTED"
+        label = "Missing levels"
+        reason = "Missing price/range inputs, so Max cannot size entry, stop, or targets."
+        rejection_code = "MISSING_LEVELS"
+    elif verdict != "Enter":
+        action = "WAIT" if verdict == "Wait" else "REJECTED"
+        label = f"Technical {verdict}"
+        reason = f"Needs Enter; current verdict is {verdict} at {round(score)}/100."
+        rejection_code = "VERDICT"
+    elif score < 70:
+        action = "WAIT"
+        label = "Score below 70"
+        reason = f"Technical score {round(score)}/100 is below Max's 70/100 entry threshold."
+        rejection_code = "SCORE"
+    elif price is not None and entry_high is not None and price > entry_high * 1.015:
+        action = "WAIT"
+        label = "Above entry"
+        reason = f"Price ${price:.2f} is more than 1.5% above Max's entry-high guard at ${entry_high:.2f}."
+        rejection_code = "ABOVE_ENTRY"
+    elif sizing_rejected:
+        action = "WAIT"
+        label = "Sizing blocked"
+        reason = "Setup passed, but cash/risk sizing is below the $50 order floor."
+        rejection_code = "SIZING"
+    elif len(open_tickers) >= max_open_positions:
+        action = "WAIT"
+        label = "Capacity full"
+        reason = (
+            f"Max already holds {len(open_tickers)}/{max_open_positions} paper positions; "
+            "needs an exit before adding more."
+        )
+        rejection_code = "CAPACITY"
+    else:
+        action = "BUY"
+        label = "Eligible"
+        reason = (
+            f"Eligible for Max's next paper entry"
+            f"{f' as candidate #{candidate_rank}' if candidate_rank else ''}: "
+            f"{round(score)}/100 on the {frame} frame."
+        )
+        eligible = True
+        rejection_code = None
+
+    return {
+        "time": generated_at,
+        "action": action,
+        "label": label,
+        "reason": reason,
+        "price": round(price, 4) if price is not None else None,
+        "score": round(score),
+        "verdict": verdict,
+        "frame": frame,
+        "candidateRank": candidate_rank,
+        "eligible": eligible,
+        "rejectionCode": rejection_code,
+    }
+
+
 def size_position(state: dict[str, Any], signal: dict[str, Any]) -> tuple[float, float]:
     levels = signal["levels"]
     price = number(levels.get("price"), 0.0) or 0.0
@@ -383,6 +856,7 @@ def run_max_bot(
     *,
     max_open_positions: int = DEFAULT_MAX_OPEN_POSITIONS,
     live_quote_count: int = 0,
+    history_by_ticker: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     generated_at = now_iso()
     state.setdefault("positions", {})
@@ -397,7 +871,10 @@ def run_max_bot(
         for profile in ready_profiles
         if is_tradable_for_new_entry(profile)
     }
-    signals = {ticker: max_signal(profile) for ticker, profile in profile_by_ticker.items()}
+    signals = {
+        ticker: max_signal(profile, (history_by_ticker or {}).get(ticker))
+        for ticker, profile in profile_by_ticker.items()
+    }
 
     # First let Max manage open risk before opening fresh trades.
     for ticker, position in list(state.get("positions", {}).items()):
@@ -451,12 +928,17 @@ def run_max_bot(
         ),
         reverse=True,
     )
+    candidate_rank_by_ticker = {
+        str(signal.get("ticker") or "").upper(): index + 1 for index, signal in enumerate(candidates)
+    }
+    sizing_rejected_tickers: set[str] = set()
 
     for signal in candidates:
         if len(state.get("positions", {})) >= max_open_positions:
             break
         shares, value = size_position(state, signal)
         if not math.isfinite(shares) or shares <= 0 or value < 50:
+            sizing_rejected_tickers.add(str(signal.get("ticker") or "").upper())
             continue
         ticker = str(signal["ticker"]).upper()
         levels = signal["levels"]
@@ -493,17 +975,20 @@ def run_max_bot(
             },
         )
 
-    for ticker, signal in sorted(signals.items(), key=lambda item: item[1].get("score", 0), reverse=True)[:250]:
-        levels = signal.get("levels") or {}
-        can_open = ticker in new_entry_tickers and should_open(signal, open_tickers)
-        state["lastEvaluations"][ticker] = {
-            "time": generated_at,
-            "action": "BUY" if can_open else "HOLD" if ticker in open_tickers else "WAIT",
-            "label": signal.get("verdict"),
-            "reason": f"Max {signal.get('verdict')} with {signal.get('score')}/100 technical conviction.",
-            "price": levels.get("price"),
-            "score": signal.get("score"),
-        }
+    open_tickers = {str(ticker).upper() for ticker in state.get("positions", {})}
+    state["lastEvaluations"] = {
+        ticker: build_bot_evaluation(
+            profile_by_ticker[ticker],
+            signal,
+            generated_at=generated_at,
+            new_entry_tickers=new_entry_tickers,
+            open_tickers=open_tickers,
+            max_open_positions=max_open_positions,
+            candidate_rank=candidate_rank_by_ticker.get(ticker),
+            sizing_rejected=ticker in sizing_rejected_tickers,
+        )
+        for ticker, signal in sorted(signals.items(), key=lambda item: item[1].get("score", 0), reverse=True)
+    }
 
     equity = account_equity(state)
     state.update(
@@ -521,6 +1006,15 @@ def run_max_bot(
                     "The static webapp displays this saved cloud-run state.",
                 ],
                 "liveQuotesApplied": live_quote_count,
+                "historyProfilesApplied": len(history_by_ticker or {}),
+                "defaultFrame": DEFAULT_BOT_FRAME_LABEL,
+                "riskSettings": {
+                    "maxOpenPositions": max_open_positions,
+                    "maxPositionFraction": MAX_POSITION_FRACTION,
+                    "riskFraction": RISK_FRACTION,
+                    "minEntryPrice": MIN_ENTRY_PRICE,
+                    "minAvgDailyDollarVolume": MIN_AVG_DAILY_DOLLAR_VOLUME,
+                },
             },
             "equity": round(equity, 4),
             "openValue": round(equity - (number(state.get("cash"), 0.0) or 0.0), 4),
@@ -548,6 +1042,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--profiles-path", default="webapp/data/research_profiles.json")
     parser.add_argument("--state-path", default="webapp/data/max_bot_state.json")
     parser.add_argument("--js-path", default="webapp/data/max_bot_state.js")
+    parser.add_argument("--history-dir", default="webapp/data/history")
     parser.add_argument("--max-open-positions", type=int, default=DEFAULT_MAX_OPEN_POSITIONS)
     parser.add_argument("--fmp-api-key", default=os.environ.get("FMP_API_KEY", ""))
     parser.add_argument("--quote-candidate-limit", type=int, default=DEFAULT_QUOTE_CANDIDATE_LIMIT)
@@ -561,12 +1056,24 @@ def main() -> None:
     profiles = profiles_payload.get("profiles") or []
     state_path = Path(args.state_path)
     state = load_state(state_path)
+    history_by_ticker: dict[str, dict[str, Any]] = {}
+    history_dir = Path(args.history_dir)
+    if history_dir.exists():
+        history_symbols = [
+            str(profile.get("ticker") or "").upper()
+            for profile in profiles
+            if is_research_ready(profile) and profile.get("ticker")
+        ]
+        history_by_ticker = load_history_by_ticker(history_dir, history_symbols)
+        if history_by_ticker:
+            print(f"Loaded cached {DEFAULT_BOT_FRAME_LABEL} history for {len(history_by_ticker)} ticker(s).")
     live_quote_count = 0
     if args.fmp_api_key:
         symbols = choose_quote_symbols(
             profiles,
             state,
             candidate_limit=args.quote_candidate_limit,
+            history_by_ticker=history_by_ticker,
         )
         try:
             quotes = fetch_fmp_quote_batch(
@@ -585,6 +1092,7 @@ def main() -> None:
         state,
         max_open_positions=args.max_open_positions,
         live_quote_count=live_quote_count,
+        history_by_ticker=history_by_ticker,
     )
     write_outputs(state, state_path, Path(args.js_path))
     print(state["lastRunSummary"])

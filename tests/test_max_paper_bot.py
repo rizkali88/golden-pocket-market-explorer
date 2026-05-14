@@ -1,6 +1,13 @@
+import time
 import unittest
 
-from golden_pocket.max_paper_bot import apply_live_quotes, is_tradable_for_new_entry, run_max_bot
+from golden_pocket.max_paper_bot import (
+    DEFAULT_BOT_FRAME_LABEL,
+    apply_live_quotes,
+    is_tradable_for_new_entry,
+    max_signal,
+    run_max_bot,
+)
 
 
 def make_profile(ticker: str, **overrides):
@@ -39,8 +46,36 @@ class MaxPaperBotTests(unittest.TestCase):
             [make_profile("PENNY", price=4.0, avgDailyDollarVolume=100_000)],
             {"positions": {}, "trades": [], "cash": 10000},
         )
-        self.assertEqual(state["lastEvaluations"]["PENNY"]["action"], "WAIT")
+        self.assertEqual(state["lastEvaluations"]["PENNY"]["action"], "REJECTED")
+        self.assertEqual(state["lastEvaluations"]["PENNY"]["rejectionCode"], "NOT_TRADABLE")
         self.assertNotIn("PENNY", state["positions"])
+
+    def test_liquidity_score_prefers_dollar_volume_over_bucket(self) -> None:
+        signal = max_signal(make_profile("LIQ", avgDailyDollarVolume=42_000_000, liquidityBucket="Low"))
+        self.assertGreaterEqual(signal["liquidityScore"], 80)
+
+    def test_uses_cached_history_frame_for_execution_levels(self) -> None:
+        now = int(time.time())
+        history = {
+            "t": [now - (8 - index) * 86_400 for index in range(9)],
+            "c": [38, 39, 40, 41, 42, 43.5, 42.2, 41.8, 41.0],
+        }
+        signal = max_signal(make_profile("FRAME", price=41.0), history)
+        self.assertEqual(signal["frame"], DEFAULT_BOT_FRAME_LABEL)
+        self.assertLess(signal["levels"]["entryHigh"], 45)
+
+    def test_capacity_reason_is_visible_for_eligible_ticker(self) -> None:
+        positions = {
+            f"OPEN{index}": {"ticker": f"OPEN{index}", "shares": 1, "entryPrice": 10, "lastPrice": 10}
+            for index in range(8)
+        }
+        state = run_max_bot(
+            [make_profile("CAP")],
+            {"positions": positions, "trades": [], "cash": 10000},
+            max_open_positions=8,
+        )
+        self.assertEqual(state["lastEvaluations"]["CAP"]["action"], "WAIT")
+        self.assertEqual(state["lastEvaluations"]["CAP"]["rejectionCode"], "CAPACITY")
 
     def test_live_quote_updates_price_context(self) -> None:
         profiles = apply_live_quotes(

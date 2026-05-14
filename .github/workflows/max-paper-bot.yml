@@ -46,8 +46,9 @@ jobs:
             --profiles-path webapp/data/research_profiles.json \
             --state-path webapp/data/max_bot_state.json \
             --js-path webapp/data/max_bot_state.js \
+            --history-dir webapp/data/history \
             --max-open-positions 8 \
-            --quote-candidate-limit 250 \
+            --quote-candidate-limit 500 \
             --quote-batch-size 100
 
       - name: Commit Max paper state

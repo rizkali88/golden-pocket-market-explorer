@@ -1805,6 +1805,55 @@ html:not([data-theme="dark"]) .opportunity-table thead th {
   align-items: center;
 }
 
+.opportunity-table__bot-status {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.opportunity-table__bot-badge {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.opportunity-table__bot-badge--hold,
+.opportunity-table__bot-badge--buy {
+  border-color: rgba(43, 111, 89, 0.48);
+  background: rgba(43, 111, 89, 0.14);
+  color: var(--success, var(--good));
+}
+
+.opportunity-table__bot-badge--wait {
+  border-color: rgba(201, 111, 59, 0.5);
+  background: rgba(201, 111, 59, 0.14);
+  color: var(--accent-2);
+}
+
+.opportunity-table__bot-badge--rejected {
+  border-color: rgba(168, 91, 50, 0.58);
+  background: rgba(168, 91, 50, 0.16);
+  color: var(--warn);
+}
+
+.opportunity-table__bot-note {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
 .opportunity-table__conviction {
   display: grid;
   gap: 7px;
@@ -1865,17 +1914,22 @@ html:not([data-theme="dark"]) .opportunity-table thead th {
 
 .market-workspace .opportunity-table th:nth-child(1),
 .market-workspace .opportunity-table td:nth-child(1) {
-  width: 45%;
+  width: 34%;
 }
 
 .market-workspace .opportunity-table th:nth-child(2),
 .market-workspace .opportunity-table td:nth-child(2) {
-  width: 21%;
+  width: 14%;
 }
 
 .market-workspace .opportunity-table th:nth-child(3),
 .market-workspace .opportunity-table td:nth-child(3) {
-  width: 34%;
+  width: 22%;
+}
+
+.market-workspace .opportunity-table th:nth-child(4),
+.market-workspace .opportunity-table td:nth-child(4) {
+  width: 30%;
 }
 
 .market-workspace .opportunity-table__conviction {

@@ -4587,6 +4587,48 @@ function buildConvictionBar(label, value, detail) {
   `;
 }
 
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => (
+    {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;",
+    }[character]
+  ));
+}
+
+function getMaxBotEvaluation(company) {
+  const ticker = String(company?.ticker ?? "").toUpperCase();
+  return paperBotState?.lastEvaluations?.[ticker] ?? paperBotState?.lastEvaluations?.[company?.ticker] ?? null;
+}
+
+function buildMaxBotStatus(company) {
+  const ticker = String(company?.ticker ?? "").toUpperCase();
+  const heldPosition = paperBotState?.positions?.[ticker] ?? paperBotState?.positions?.[company?.ticker];
+  const evaluation = getMaxBotEvaluation(company);
+  const action = String(heldPosition ? "HOLD" : evaluation?.action ?? "WAIT").toLowerCase();
+  const rawLabel = heldPosition ? "Held" : evaluation?.label ?? "Not scanned";
+  const scoreText = Number.isFinite(Number(evaluation?.score)) ? ` ${Math.round(Number(evaluation.score))}/100` : "";
+  const reason =
+    heldPosition && !evaluation?.reason
+      ? "Open paper position; Max is managing the stop and targets."
+      : evaluation?.reason ?? "Waiting for the next autonomous Max cloud run.";
+  const frame = evaluation?.frame ? `Frame: ${evaluation.frame}.` : "";
+
+  return `
+    <div class="opportunity-table__bot-status">
+      <span class="opportunity-table__bot-badge opportunity-table__bot-badge--${action}">
+        ${escapeHtml(rawLabel)}${escapeHtml(scoreText)}
+      </span>
+      <small class="opportunity-table__bot-note" title="${escapeHtml(reason)}">
+        ${escapeHtml(reason)} ${escapeHtml(frame)}
+      </small>
+    </div>
+  `;
+}
+
 function buildJohnInputTiles(company, opportunity, resolved) {
   const fundamentals = company.fundamentals ?? {};
   const analystUpside = getAnalystUpsidePct(company);
@@ -6190,6 +6232,9 @@ function renderOpportunityTable() {
               <span class="opportunity-table__decision opportunity-table__decision--${decision.finalCall.toLowerCase()}">${decision.finalCall}</span>
             </div>
           </div>
+        </td>
+        <td>
+          ${buildMaxBotStatus(company)}
         </td>
         <td>
           <div class="opportunity-table__conviction">
