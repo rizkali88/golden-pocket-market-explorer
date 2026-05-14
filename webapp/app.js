@@ -1051,6 +1051,14 @@ const paperBotHoldingsChartWrap = document.querySelector("#paper-bot-holdings-ch
 const paperBotHoldingsPath = document.querySelector("#paper-bot-holdings-path");
 const paperBotHoldingsFill = document.querySelector("#paper-bot-holdings-fill");
 const paperBotHoldingsDot = document.querySelector("#paper-bot-holdings-dot");
+const paperBotHoldingsHoverLine = document.querySelector("#paper-bot-holdings-hover-line");
+const paperBotHoldingsHoverDot = document.querySelector("#paper-bot-holdings-hover-dot");
+const paperBotHoldingsTooltip = document.querySelector("#paper-bot-holdings-tooltip");
+const paperBotHoldingsYMax = document.querySelector("#paper-bot-holdings-y-max");
+const paperBotHoldingsYMid = document.querySelector("#paper-bot-holdings-y-mid");
+const paperBotHoldingsYMin = document.querySelector("#paper-bot-holdings-y-min");
+const paperBotHoldingsXStart = document.querySelector("#paper-bot-holdings-x-start");
+const paperBotHoldingsXEnd = document.querySelector("#paper-bot-holdings-x-end");
 const paperBotHoldingsEmpty = document.querySelector("#paper-bot-holdings-empty");
 const paperBotLiveStatus = document.querySelector("#paper-bot-live-status");
 const paperBotPositions = document.querySelector("#paper-bot-positions");
@@ -1140,6 +1148,7 @@ let pendingPaperBotCloseTicker = null;
 let currentPaperBotHoldingsRangeId =
   window.localStorage.getItem("golden-pocket-paper-bot-holdings-range") || "1m";
 let paperBotHoldingsRenderId = 0;
+let currentPaperBotHoldingsPlot = null;
 
 const MAX_EXECUTION_RANGES = [
   { id: "1d", label: "1D", days: 1 },
@@ -1673,78 +1682,339 @@ function getPaperBotHistoryPoints(history) {
     .sort((left, right) => left.time - right.time);
 }
 
-function makeFallbackPaperBotHoldingsSeries(snapshot) {
-  const costBasis = snapshot.positions.reduce((sum, position) => sum + Number(position.costBasis ?? 0), 0);
-  const currentValue = snapshot.openValue;
+function parsePaperBotTimeSeconds(value) {
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null;
+}
+
+function getPaperBotLedgerStartTime(snapshot) {
+  const times = [
+    ...(Array.isArray(paperBotState.trades) ? paperBotState.trades : []).map((trade) => parsePaperBotTimeSeconds(trade?.time)),
+    ...snapshot.positions.map((position) => parsePaperBotTimeSeconds(position?.openedAt)),
+  ].filter((time) => Number.isFinite(time) && time > 0);
+  return times.length ? Math.min(...times) : Math.floor(Date.now() / 1000);
+}
+
+function getPaperBotChartStartTime(snapshot) {
   const now = Math.floor(Date.now() / 1000);
+  const ledgerStart = getPaperBotLedgerStartTime(snapshot);
   const range = getSelectedPaperBotHoldingsRange();
-  const startTime = range.days ? now - range.days * 86_400 : now - 31 * 86_400;
-  const points = Array.from({ length: 8 }, (_, index) => {
-    const ratio = index / 7;
+  return range.days ? Math.max(ledgerStart, now - range.days * 86_400) : ledgerStart;
+}
+
+function formatPaperBotAxisDate(seconds) {
+  const date = new Date(Number(seconds) * 1000);
+  if (Number.isNaN(date.getTime())) {
+    return "--";
+  }
+  const now = new Date();
+  const sameYear = date.getFullYear() === now.getFullYear();
+  return date.toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "2-digit" }),
+  });
+}
+
+function formatPaperBotTooltipDate(seconds) {
+  const date = new Date(Number(seconds) * 1000);
+  if (Number.isNaN(date.getTime())) {
+    return "--";
+  }
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function getPaperBotTradePrice(trade) {
+  const price = Number(trade?.exitPrice ?? trade?.price ?? trade?.entryPrice);
+  return Number.isFinite(price) && price > 0 ? price : 0;
+}
+
+function getPaperBotTradeValue(trade) {
+  const directValue = Number(trade?.value);
+  if (Number.isFinite(directValue) && directValue > 0) {
+    return directValue;
+  }
+  return Number(trade?.shares ?? 0) * getPaperBotTradePrice(trade);
+}
+
+function makeFallbackPaperBotHoldingsSeries(snapshot) {
+  const startTime = getPaperBotChartStartTime(snapshot);
+  const now = Math.floor(Date.now() / 1000);
+  const startValue = Number(paperBotState.startingCash ?? PAPER_BOT_STARTING_CASH);
+  const currentValue = snapshot.equity;
+  const pointCount = 12;
+  return Array.from({ length: pointCount }, (_, index) => {
+    const ratio = index / Math.max(pointCount - 1, 1);
     return {
       time: Math.round(startTime + (now - startTime) * ratio),
-      value: costBasis + (currentValue - costBasis) * ratio,
+      value: startValue + (currentValue - startValue) * ratio,
     };
   });
-  return points;
+}
+
+function thinPaperBotSeries(series, maxPoints = 260) {
+  if (series.length <= maxPoints) {
+    return series;
+  }
+  return series.filter((point, index) => {
+    if (index === 0 || index === series.length - 1) {
+      return true;
+    }
+    return index % Math.ceil(series.length / maxPoints) === 0;
+  });
+}
+
+function getPaperBotSavedEquityCurve(snapshot, startTime, now) {
+  const savedCurve = Array.isArray(paperBotState.equityCurve) ? paperBotState.equityCurve : [];
+  const curvePoints = savedCurve
+    .map((point) => ({
+      time: parsePaperBotTimeSeconds(point?.time ?? point?.generatedAt),
+      value: Number(point?.equity ?? point?.value),
+    }))
+    .filter((point) => Number.isFinite(point.time) && point.time >= startTime && point.time <= now && Number.isFinite(point.value));
+  const points = [
+    { time: startTime, value: Number(paperBotState.startingCash ?? PAPER_BOT_STARTING_CASH) },
+    ...curvePoints,
+    { time: now, value: Number(snapshot.equity) },
+  ];
+  const deduped = new Map();
+  points.forEach((point) => {
+    if (Number.isFinite(point.time) && Number.isFinite(point.value)) {
+      deduped.set(point.time, point);
+    }
+  });
+  return [...deduped.values()].sort((left, right) => left.time - right.time);
 }
 
 async function buildPaperBotHoldingsSeries(snapshot) {
-  if (!snapshot.positions.length) {
+  const trades = (Array.isArray(paperBotState.trades) ? paperBotState.trades : [])
+    .map((trade) => ({ ...trade, timestamp: parsePaperBotTimeSeconds(trade?.time) }))
+    .filter((trade) => Number.isFinite(trade.timestamp) && trade.timestamp > 0)
+    .sort((left, right) => left.timestamp - right.timestamp);
+  if (!trades.length && !snapshot.positions.length) {
     return [];
   }
-  const range = getSelectedPaperBotHoldingsRange();
   const now = Math.floor(Date.now() / 1000);
-  const startTime = range.days ? now - range.days * 86_400 : 0;
+  const startTime = getPaperBotChartStartTime(snapshot);
+  const savedEquityCurve = getPaperBotSavedEquityCurve(snapshot, startTime, now);
+  if (savedEquityCurve.length > 2) {
+    return thinPaperBotSeries(savedEquityCurve);
+  }
+  const allTickers = [
+    ...new Set([
+      ...trades.map((trade) => getPaperBotTicker(trade)).filter(Boolean),
+      ...snapshot.positions.map((position) => getPaperBotTicker(position)).filter(Boolean),
+    ]),
+  ];
+  const shouldUseCachedHistory = now - startTime > 2 * 86_400;
   const historySets = await Promise.all(
-    snapshot.positions.map(async (position) => {
-      const ticker = getPaperBotTicker(position);
+    allTickers.map(async (ticker) => {
+      const currentPosition = snapshot.positions.find((position) => getPaperBotTicker(position) === ticker);
+      if (!shouldUseCachedHistory) {
+        return {
+          ticker,
+          points: currentPosition?.markPrice > 0 ? [{ time: now, close: Number(currentPosition.markPrice) }] : [],
+        };
+      }
       const company = companyUniverseByTicker.get(ticker) ?? { ticker };
       try {
         const history = await getCompanyPriceHistory(company);
         const points = getPaperBotHistoryPoints(history);
-        if (position.markPrice > 0) {
-          points.push({ time: now, close: Number(position.markPrice) });
+        if (currentPosition?.markPrice > 0) {
+          points.push({ time: now, close: Number(currentPosition.markPrice) });
         }
         return {
-          position,
-          points: points.filter((point) => !startTime || point.time >= startTime).sort((left, right) => left.time - right.time),
+          ticker,
+          points: points.filter((point) => point.time >= startTime - 86_400).sort((left, right) => left.time - right.time),
         };
       } catch (error) {
-        return { position, points: [] };
+        return { ticker, points: [] };
       }
     }),
   );
 
-  const usefulHistorySets = historySets.filter((set) => set.points.length > 1);
-  if (!usefulHistorySets.length) {
+  const usefulHistorySets = historySets.filter((set) => set.points.length > 0);
+  if (!trades.length && !usefulHistorySets.length) {
     return makeFallbackPaperBotHoldingsSeries(snapshot);
   }
 
-  const times = [...new Set(usefulHistorySets.flatMap((set) => set.points.map((point) => point.time)))].sort(
-    (left, right) => left - right,
-  );
-  if (times.length < 2) {
+  const tradePriceHistory = new Map();
+  trades.forEach((trade) => {
+    const ticker = getPaperBotTicker(trade);
+    if (!ticker) {
+      return;
+    }
+    if (!tradePriceHistory.has(ticker)) {
+      tradePriceHistory.set(ticker, []);
+    }
+    tradePriceHistory.get(ticker).push({ time: trade.timestamp, close: getPaperBotTradePrice(trade) });
+  });
+
+  const times = [
+    startTime,
+    now,
+    ...trades.map((trade) => trade.timestamp).filter((time) => time >= startTime),
+    ...usefulHistorySets.flatMap((set) => set.points.map((point) => point.time).filter((time) => time >= startTime && time <= now)),
+  ];
+  const uniqueTimes = [...new Set(times)]
+    .filter((time) => Number.isFinite(time) && time >= startTime && time <= now)
+    .sort((left, right) => left - right);
+  if (uniqueTimes.length < 2) {
     return makeFallbackPaperBotHoldingsSeries(snapshot);
   }
 
-  const cursors = new Map(usefulHistorySets.map((set) => [getPaperBotTicker(set.position), 0]));
-  return times.map((time) => {
-    const value = snapshot.positions.reduce((sum, position) => {
-      const ticker = getPaperBotTicker(position);
-      const historySet = usefulHistorySets.find((set) => getPaperBotTicker(set.position) === ticker);
-      if (!historySet) {
-        return sum + Number(position.marketValue ?? 0);
+  const historyByTicker = new Map(usefulHistorySets.map((set) => [set.ticker, set.points]));
+  const priceCursors = new Map();
+  const tradePriceCursors = new Map();
+  const openShares = new Map();
+  let tradeCursor = 0;
+  let cash = Number(paperBotState.startingCash ?? PAPER_BOT_STARTING_CASH);
+
+  const getPriceAtTime = (ticker, time, fallback = 0) => {
+    const points = historyByTicker.get(ticker) ?? [];
+    let cursor = priceCursors.get(ticker) ?? 0;
+    while (cursor + 1 < points.length && points[cursor + 1].time <= time) {
+      cursor += 1;
+    }
+    priceCursors.set(ticker, cursor);
+    const historicalPoint = points[cursor]?.time <= time ? points[cursor] : null;
+    const tradePrices = tradePriceHistory.get(ticker) ?? [];
+    let tradePriceCursor = tradePriceCursors.get(ticker) ?? 0;
+    while (tradePriceCursor + 1 < tradePrices.length && tradePrices[tradePriceCursor + 1].time <= time) {
+      tradePriceCursor += 1;
+    }
+    tradePriceCursors.set(ticker, tradePriceCursor);
+    const tradePoint = tradePrices[tradePriceCursor]?.time <= time ? tradePrices[tradePriceCursor] : null;
+    const newestPoint =
+      historicalPoint && tradePoint
+        ? historicalPoint.time >= tradePoint.time
+          ? historicalPoint
+          : tradePoint
+        : historicalPoint ?? tradePoint;
+    const price = Number(newestPoint?.close);
+    return Number.isFinite(price) && price > 0 ? price : fallback;
+  };
+
+  const applyTrade = (trade) => {
+    const ticker = getPaperBotTicker(trade);
+    const type = String(trade?.type ?? "").toUpperCase();
+    const shares = Number(trade?.shares ?? 0);
+    const value = getPaperBotTradeValue(trade);
+    if (!ticker || !Number.isFinite(shares) || shares <= 0) {
+      return;
+    }
+    if (type === "BUY") {
+      cash -= value;
+      openShares.set(ticker, roundPaperBotMoney((openShares.get(ticker) ?? 0) + shares, 6));
+    } else if (type === "SELL") {
+      cash += value;
+      const nextShares = roundPaperBotMoney((openShares.get(ticker) ?? 0) - shares, 6);
+      if (nextShares > 0.000001) {
+        openShares.set(ticker, nextShares);
+      } else {
+        openShares.delete(ticker);
       }
-      let cursor = cursors.get(ticker) ?? 0;
-      while (cursor + 1 < historySet.points.length && historySet.points[cursor + 1].time <= time) {
-        cursor += 1;
-      }
-      cursors.set(ticker, cursor);
-      const close = Number(historySet.points[cursor]?.close ?? position.markPrice ?? position.entryPrice ?? 0);
-      return sum + close * Number(position.shares ?? 0);
+    }
+  };
+
+  const series = uniqueTimes.map((time) => {
+    while (tradeCursor < trades.length && trades[tradeCursor].timestamp <= time) {
+      applyTrade(trades[tradeCursor]);
+      tradeCursor += 1;
+    }
+    const openValue = [...openShares.entries()].reduce((sum, [ticker, shares]) => {
+      const livePosition = snapshot.positions.find((position) => getPaperBotTicker(position) === ticker);
+      const fallback = Number(livePosition?.markPrice ?? livePosition?.entryPrice ?? 0);
+      return sum + shares * getPriceAtTime(ticker, time, fallback);
     }, 0);
-    return { time, value };
+    return { time, value: cash + openValue };
+  });
+
+  const lastPoint = series.at(-1);
+  if (lastPoint) {
+    lastPoint.value = snapshot.equity;
+    lastPoint.time = now;
+  }
+  return thinPaperBotSeries(series.filter((point) => Number.isFinite(point.value) && point.value > 0));
+}
+
+function getNearestPaperBotHoldingsPoint(clientX) {
+  if (!currentPaperBotHoldingsPlot?.points?.length || !paperBotHoldingsChartWrap) {
+    return null;
+  }
+  const rect = paperBotHoldingsChartWrap.getBoundingClientRect();
+  const ratio = clampNumber((clientX - rect.left) / Math.max(rect.width, 1), 0, 1);
+  const targetX =
+    currentPaperBotHoldingsPlot.left +
+    ratio * (currentPaperBotHoldingsPlot.right - currentPaperBotHoldingsPlot.left);
+  return currentPaperBotHoldingsPlot.points.reduce((nearest, point) =>
+    Math.abs(point.x - targetX) < Math.abs(nearest.x - targetX) ? point : nearest,
+  );
+}
+
+function updatePaperBotHoldingsHover(event) {
+  const point = getNearestPaperBotHoldingsPoint(event.clientX);
+  if (!point || !paperBotHoldingsHoverLine || !paperBotHoldingsHoverDot || !paperBotHoldingsTooltip || !paperBotHoldingsChartWrap) {
+    return;
+  }
+  const rect = paperBotHoldingsChartWrap.getBoundingClientRect();
+  const leftPercent = (point.x / 1000) * 100;
+  paperBotHoldingsHoverLine.hidden = false;
+  paperBotHoldingsHoverDot.hidden = false;
+  paperBotHoldingsTooltip.hidden = false;
+  paperBotHoldingsHoverLine.setAttribute("x1", point.x.toFixed(2));
+  paperBotHoldingsHoverLine.setAttribute("x2", point.x.toFixed(2));
+  paperBotHoldingsHoverDot.setAttribute("cx", point.x.toFixed(2));
+  paperBotHoldingsHoverDot.setAttribute("cy", point.y.toFixed(2));
+  paperBotHoldingsTooltip.innerHTML = `
+    <strong>${formatMoney(point.value)}</strong>
+    <span>${formatPaperBotTooltipDate(point.time)}</span>
+  `;
+  paperBotHoldingsTooltip.style.left = `${clampNumber(leftPercent, 14, 86)}%`;
+  paperBotHoldingsTooltip.style.top = `${clampNumber((point.y / 260) * 100, 14, 74)}%`;
+}
+
+function hidePaperBotHoldingsHover() {
+  if (paperBotHoldingsHoverLine) {
+    paperBotHoldingsHoverLine.hidden = true;
+  }
+  if (paperBotHoldingsHoverDot) {
+    paperBotHoldingsHoverDot.hidden = true;
+  }
+  if (paperBotHoldingsTooltip) {
+    paperBotHoldingsTooltip.hidden = true;
+  }
+}
+
+function renderPaperBotHoldingsAxes(min, max, series) {
+  const midpoint = min + (max - min) / 2;
+  if (paperBotHoldingsYMax) {
+    paperBotHoldingsYMax.textContent = formatCompactNumber(max, { currency: true });
+  }
+  if (paperBotHoldingsYMid) {
+    paperBotHoldingsYMid.textContent = formatCompactNumber(midpoint, { currency: true });
+  }
+  if (paperBotHoldingsYMin) {
+    paperBotHoldingsYMin.textContent = formatCompactNumber(min, { currency: true });
+  }
+  if (paperBotHoldingsXStart) {
+    paperBotHoldingsXStart.textContent = series.length ? formatPaperBotAxisDate(series[0].time) : "--";
+  }
+  if (paperBotHoldingsXEnd) {
+    paperBotHoldingsXEnd.textContent = series.length ? formatPaperBotAxisDate(series.at(-1).time) : "--";
+  }
+}
+
+function clearPaperBotHoldingsAxes() {
+  [paperBotHoldingsYMax, paperBotHoldingsYMid, paperBotHoldingsYMin, paperBotHoldingsXStart, paperBotHoldingsXEnd].forEach((element) => {
+    if (element) {
+      element.textContent = "--";
+    }
   });
 }
 
@@ -1752,13 +2022,21 @@ function makeSmoothSvgPath(points) {
   if (!points.length) {
     return "";
   }
+  if (points.length === 2) {
+    return `M${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)} L${points[1].x.toFixed(2)} ${points[1].y.toFixed(2)}`;
+  }
   return points.reduce((path, point, index) => {
     if (index === 0) {
       return `M${point.x.toFixed(2)} ${point.y.toFixed(2)}`;
     }
     const previous = points[index - 1];
-    const controlOffset = (point.x - previous.x) * 0.5;
-    return `${path} C${(previous.x + controlOffset).toFixed(2)} ${previous.y.toFixed(2)} ${(point.x - controlOffset).toFixed(2)} ${point.y.toFixed(2)} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`;
+    const next = points[index + 1] ?? point;
+    const previousPrevious = points[index - 2] ?? previous;
+    const cp1x = previous.x + (point.x - previousPrevious.x) / 6;
+    const cp1y = previous.y + (point.y - previousPrevious.y) / 6;
+    const cp2x = point.x - (next.x - previous.x) / 6;
+    const cp2y = point.y - (next.y - previous.y) / 6;
+    return `${path} C${cp1x.toFixed(2)} ${cp1y.toFixed(2)} ${cp2x.toFixed(2)} ${cp2y.toFixed(2)} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`;
   }, "");
 }
 
@@ -1766,11 +2044,14 @@ function renderPaperBotHoldingsSvg(series, snapshot) {
   if (!paperBotHoldingsPath || !paperBotHoldingsFill || !paperBotHoldingsDot || !paperBotHoldingsEmpty) {
     return;
   }
-  if (!snapshot.positions.length || series.length < 2) {
+  if (series.length < 2) {
     paperBotHoldingsPath.removeAttribute("d");
     paperBotHoldingsFill.removeAttribute("d");
     paperBotHoldingsDot.removeAttribute("cx");
     paperBotHoldingsDot.removeAttribute("cy");
+    hidePaperBotHoldingsHover();
+    clearPaperBotHoldingsAxes();
+    currentPaperBotHoldingsPlot = null;
     paperBotHoldingsEmpty.hidden = false;
     return;
   }
@@ -1778,17 +2059,16 @@ function renderPaperBotHoldingsSvg(series, snapshot) {
   const values = series.map((point) => Number(point.value)).filter(Number.isFinite);
   const minValue = Math.min(...values);
   const maxValue = Math.max(...values);
-  const padding = Math.max((maxValue - minValue) * 0.18, Math.max(maxValue, 1) * 0.01);
+  const padding = Math.max((maxValue - minValue) * 0.18, Math.max(maxValue, 1) * 0.004);
   const min = minValue - padding;
   const max = maxValue + padding;
-  const width = 420;
-  const height = 170;
-  const left = 14;
-  const right = 406;
-  const top = 18;
-  const bottom = 150;
+  const left = 70;
+  const right = 950;
+  const top = 38;
+  const bottom = 214;
   const valueRange = Math.max(max - min, 1);
   const points = series.map((point, index) => ({
+    ...point,
     x: left + (index / Math.max(series.length - 1, 1)) * (right - left),
     y: bottom - ((Number(point.value) - min) / valueRange) * (bottom - top),
   }));
@@ -1803,19 +2083,19 @@ function renderPaperBotHoldingsSvg(series, snapshot) {
   paperBotHoldingsDot.setAttribute("cx", lastPoint.x.toFixed(2));
   paperBotHoldingsDot.setAttribute("cy", lastPoint.y.toFixed(2));
   paperBotHoldingsEmpty.hidden = true;
+  renderPaperBotHoldingsAxes(minValue, maxValue, series);
+  currentPaperBotHoldingsPlot = { points, left, right, top, bottom };
 }
 
 function renderPaperBotHoldingsChart(snapshot) {
   renderPaperBotHoldingsRangeSwitcher();
-  const costBasis = snapshot.positions.reduce((sum, position) => sum + Number(position.costBasis ?? 0), 0);
-  const pnlTone = snapshot.unrealizedPnl >= 0 ? "positive" : "negative";
+  const totalPnl = snapshot.equity - PAPER_BOT_STARTING_CASH;
+  const pnlTone = totalPnl >= 0 ? "positive" : "negative";
   if (paperBotHoldingsValue) {
-    paperBotHoldingsValue.textContent = formatMoney(snapshot.openValue);
+    paperBotHoldingsValue.textContent = formatMoney(snapshot.equity);
   }
   if (paperBotHoldingsReturn) {
-    paperBotHoldingsReturn.textContent = `${formatSignedMoney(snapshot.unrealizedPnl)} | ${formatPercent(
-      costBasis > 0 ? (snapshot.unrealizedPnl / costBasis) * 100 : 0,
-    )}`;
+    paperBotHoldingsReturn.textContent = `${formatSignedMoney(totalPnl)} | ${formatPercent(snapshot.returnPct)}`;
     paperBotHoldingsReturn.dataset.tone = pnlTone;
   }
   if (paperBotHoldingsChartWrap) {
@@ -6222,7 +6502,12 @@ function renderPaperBotPanel(company = null, johnView = null, maxView = null, de
             const row = document.createElement("tr");
             const pnlTone = position.unrealizedPnl >= 0 ? "positive" : "negative";
             row.innerHTML = `
-              <td><strong>${position.ticker}</strong><small>${position.name ?? ""}</small></td>
+              <td>
+                <button class="paper-bot-ticker-button" type="button" data-paper-bot-select-ticker="${escapeHtml(position.ticker)}">
+                  <strong>${position.ticker}</strong>
+                  <small>${position.name ?? ""}</small>
+                </button>
+              </td>
               <td>${formatNumber(position.shares, 4)}</td>
               <td>${formatMoney(position.entryPrice)}</td>
               <td>${formatMoney(position.markPrice)}<small>${position.markMeta}</small></td>
@@ -6243,6 +6528,16 @@ function renderPaperBotPanel(company = null, johnView = null, maxView = null, de
   if (paperBotTransactionsModal && !paperBotTransactionsModal.hidden) {
     renderPaperBotTransactionsModal();
   }
+}
+
+function selectPaperBotPositionTicker(ticker) {
+  const normalizedTicker = getPaperBotTicker(ticker);
+  const company = companyUniverseByTicker.get(normalizedTicker);
+  if (!company) {
+    return;
+  }
+  currentCompanyId = company.id;
+  renderCompany(company.id);
 }
 
 function openPaperBotCloseConfirm(ticker) {
@@ -7017,10 +7312,21 @@ if (paperBotPositions) {
   paperBotPositions.addEventListener("click", (event) => {
     const closeButton = event.target?.closest?.("[data-paper-bot-close-trade]");
     if (!closeButton) {
+      const tickerButton = event.target?.closest?.("[data-paper-bot-select-ticker]");
+      if (tickerButton) {
+        selectPaperBotPositionTicker(tickerButton.dataset.paperBotSelectTicker);
+      }
       return;
     }
     openPaperBotCloseConfirm(closeButton.dataset.paperBotCloseTrade);
   });
+}
+
+if (paperBotHoldingsChartWrap) {
+  paperBotHoldingsChartWrap.addEventListener("pointermove", updatePaperBotHoldingsHover);
+  paperBotHoldingsChartWrap.addEventListener("pointerleave", hidePaperBotHoldingsHover);
+  paperBotHoldingsChartWrap.addEventListener("mousemove", updatePaperBotHoldingsHover);
+  paperBotHoldingsChartWrap.addEventListener("mouseleave", hidePaperBotHoldingsHover);
 }
 
 if (paperBotCloseConfirmOk) {

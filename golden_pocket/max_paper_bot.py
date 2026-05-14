@@ -623,6 +623,7 @@ def default_state() -> dict[str, Any]:
         "realizedPnl": 0.0,
         "positions": {},
         "trades": [],
+        "equityCurve": [],
         "lastEvaluations": {},
         "autoEnabled": True,
     }
@@ -643,6 +644,7 @@ def load_state(path: Path) -> dict[str, Any]:
     state["realizedPnl"] = number(state.get("realizedPnl"), 0.0) or 0.0
     state["positions"] = state.get("positions") if isinstance(state.get("positions"), dict) else {}
     state["trades"] = state.get("trades") if isinstance(state.get("trades"), list) else []
+    state["equityCurve"] = state.get("equityCurve") if isinstance(state.get("equityCurve"), list) else []
     state["lastEvaluations"] = (
         state.get("lastEvaluations") if isinstance(state.get("lastEvaluations"), dict) else {}
     )
@@ -694,6 +696,23 @@ def account_equity(state: dict[str, Any]) -> float:
         price = number(position.get("lastPrice"), position.get("entryPrice")) or 0.0
         open_value += shares * price
     return (number(state.get("cash"), 0.0) or 0.0) + open_value
+
+
+def append_equity_curve_point(state: dict[str, Any], generated_at: str, equity: float) -> None:
+    curve = state.get("equityCurve") if isinstance(state.get("equityCurve"), list) else []
+    point = {
+        "time": generated_at,
+        "equity": round(equity, 4),
+        "cash": round(number(state.get("cash"), 0.0) or 0.0, 4),
+        "openValue": round(equity - (number(state.get("cash"), 0.0) or 0.0), 4),
+        "realizedPnl": round(number(state.get("realizedPnl"), 0.0) or 0.0, 4),
+        "openPositions": len(state.get("positions", {})),
+    }
+    if curve and str(curve[0].get("time")) == generated_at:
+        curve[0] = point
+    else:
+        curve = [point, *curve]
+    state["equityCurve"] = curve[:1000]
 
 
 def should_open(signal: dict[str, Any], open_tickers: set[str]) -> bool:
@@ -997,6 +1016,7 @@ def run_max_bot(
     }
 
     equity = account_equity(state)
+    append_equity_curve_point(state, generated_at, equity)
     state.update(
         {
             "mode": "max_autonomous_cloud",

@@ -1279,14 +1279,14 @@ body::before {
 }
 
 .paper-bot-overview {
-  grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1.2fr);
+  grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.25fr);
 }
 
 .paper-bot-card,
 .paper-bot-table-card {
   border: 1px solid var(--line);
-  border-radius: 24px;
-  padding: 18px;
+  border-radius: 22px;
+  padding: 14px 16px;
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
     rgba(255, 255, 255, 0.05);
@@ -1294,7 +1294,7 @@ body::before {
 
 .paper-bot-card {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .paper-bot-card > span,
@@ -1309,7 +1309,7 @@ body::before {
 .paper-bot-card > strong {
   color: var(--ink);
   font-family: "Georgia", "Palatino Linotype", serif;
-  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-size: clamp(1.7rem, 3.2vw, 2.65rem);
   line-height: 1;
 }
 
@@ -1325,7 +1325,7 @@ body::before {
 
 .paper-bot-card--holdings-chart {
   position: relative;
-  min-height: 260px;
+  min-height: 220px;
   overflow: hidden;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
@@ -1363,16 +1363,16 @@ body::before {
 
 .holdings-chart__header strong {
   display: block;
-  margin-top: 8px;
+  margin-top: 5px;
   color: var(--ink);
   font-family: "Georgia", "Palatino Linotype", serif;
-  font-size: clamp(2rem, 4vw, 3.8rem);
+  font-size: clamp(2rem, 3.4vw, 3.35rem);
   line-height: 0.92;
 }
 
 .holdings-chart__header small {
   display: block;
-  margin-top: 8px;
+  margin-top: 6px;
   color: var(--muted);
   font-weight: 900;
 }
@@ -1411,8 +1411,8 @@ body::before {
 
 .holdings-chart__canvas {
   position: relative;
-  min-height: 150px;
-  margin-top: 4px;
+  min-height: 124px;
+  margin-top: 0;
   color: var(--accent);
 }
 
@@ -1435,8 +1435,10 @@ body::before {
 .holdings-chart__line {
   fill: none;
   stroke: currentColor;
-  stroke-width: 4.5;
+  stroke-width: 6;
   stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
   filter: drop-shadow(0 8px 14px rgba(99, 210, 200, 0.18));
 }
 
@@ -1447,7 +1449,88 @@ body::before {
 .holdings-chart__last-dot {
   fill: var(--surface-strong);
   stroke: currentColor;
-  stroke-width: 3;
+  stroke-width: 3.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.holdings-chart__grid {
+  stroke: var(--line);
+  stroke-width: 1;
+  stroke-dasharray: 6 10;
+  opacity: 0.55;
+  vector-effect: non-scaling-stroke;
+}
+
+.holdings-chart__hover-line {
+  stroke: var(--ink);
+  stroke-width: 1;
+  stroke-dasharray: 4 8;
+  opacity: 0.38;
+  vector-effect: non-scaling-stroke;
+}
+
+.holdings-chart__hover-dot {
+  fill: var(--surface-strong);
+  stroke: currentColor;
+  stroke-width: 3.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.holdings-chart__axis {
+  position: absolute;
+  z-index: 2;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+.holdings-chart__axis--y {
+  top: 7px;
+  right: 0;
+  bottom: 20px;
+  display: grid;
+  align-content: space-between;
+  text-align: right;
+}
+
+.holdings-chart__axis--x {
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.holdings-chart__tooltip {
+  position: absolute;
+  z-index: 4;
+  min-width: 126px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.18);
+  transform: translate(-50%, -112%);
+  pointer-events: none;
+}
+
+.holdings-chart__tooltip strong,
+.holdings-chart__tooltip span {
+  display: block;
+}
+
+.holdings-chart__tooltip strong {
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.holdings-chart__tooltip span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
 }
 
 .holdings-chart__empty {
@@ -1489,8 +1572,8 @@ body::before {
   display: grid;
   gap: 4px;
   border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 10px;
+  border-radius: 14px;
+  padding: 8px 10px;
   background: rgba(255, 255, 255, 0.06);
 }
 
@@ -1568,6 +1651,34 @@ body::before {
   margin-top: 4px;
   color: var(--muted);
   font-weight: 800;
+}
+
+.paper-bot-ticker-button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.paper-bot-ticker-button strong {
+  width: max-content;
+  border-bottom: 1px solid transparent;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.paper-bot-ticker-button:hover strong {
+  color: var(--accent);
+  border-color: currentColor;
+}
+
+.paper-bot-ticker-button small {
+  margin-top: 0 !important;
 }
 
 .paper-bot-table__open-pnl strong {
