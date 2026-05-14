@@ -5722,15 +5722,24 @@ function makePaperBotEmptyRow(message, columns) {
   return row;
 }
 
+function getTradeRealizedPnl(trade) {
+  const directValue = Number(trade?.realizedPnl ?? trade?.realizedPnL ?? trade?.pnl);
+  if (Number.isFinite(directValue)) {
+    return directValue;
+  }
+  return null;
+}
+
 function makePaperBotTransactionRow(trade) {
   const type = String(trade?.type ?? "NOTE").toUpperCase();
   const shares = Number(trade?.shares);
   const price = Number(trade?.price);
   const value = Number(trade?.value);
-  const pnl = Number(trade?.pnl);
+  const realizedPnl = getTradeRealizedPnl(trade);
   const fallbackValue =
     Number.isFinite(shares) && Number.isFinite(price) ? shares * price : null;
-  const pnlTone = Number.isFinite(pnl) ? (pnl < 0 ? "negative" : "positive") : "";
+  const pnlTone =
+    realizedPnl == null ? "" : realizedPnl < 0 ? "negative" : realizedPnl > 0 ? "positive" : "neutral";
   const row = document.createElement("tr");
   row.innerHTML = `
     <td>${escapeHtml(formatPaperBotTime(trade?.time))}</td>
@@ -5739,7 +5748,7 @@ function makePaperBotTransactionRow(trade) {
     <td>${Number.isFinite(shares) ? escapeHtml(formatNumber(shares, 4)) : "--"}</td>
     <td>${Number.isFinite(price) ? escapeHtml(formatMoney(price)) : "--"}</td>
     <td>${Number.isFinite(value) ? escapeHtml(formatMoney(value)) : fallbackValue == null ? "--" : escapeHtml(formatMoney(fallbackValue))}</td>
-    <td${pnlTone ? ` data-tone="${pnlTone}"` : ""}>${Number.isFinite(pnl) ? escapeHtml(formatSignedMoney(pnl)) : "--"}</td>
+    <td${pnlTone ? ` data-tone="${pnlTone}"` : ""}>${realizedPnl == null ? "--" : escapeHtml(formatSignedMoney(realizedPnl))}</td>
     <td class="paper-bot-table__reason">${escapeHtml(trade?.reason ?? "")}</td>
   `;
   return row;

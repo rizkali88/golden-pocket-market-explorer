@@ -1496,16 +1496,20 @@ body::before {
   position: relative;
   z-index: 1;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   width: min(1180px, 100%);
   max-height: min(760px, calc(100vh - 48px));
+  min-height: min(620px, calc(100vh - 48px));
   gap: 18px;
   border: 1px solid var(--line);
   border-radius: 28px;
   padding: 22px;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
-    var(--panel);
+    radial-gradient(circle at top left, rgba(99, 210, 200, 0.16), transparent 28%),
+    linear-gradient(145deg, rgba(31, 45, 61, 0.98), rgba(14, 25, 37, 0.98));
+  color: #eef6ff;
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.34);
+  overflow: hidden;
 }
 
 .paper-bot-modal__header {
@@ -1517,22 +1521,27 @@ body::before {
 
 .paper-bot-modal__header h2 {
   margin-top: 4px;
+  color: #eef6ff;
   font-size: clamp(2rem, 4vw, 3.2rem);
   line-height: 0.98;
 }
 
 .paper-bot-modal__header p:last-child {
   max-width: 64ch;
-  color: var(--muted);
+  color: #b8c7d9;
   font-weight: 800;
 }
 
+.paper-bot-modal .eyebrow {
+  color: #7bd9d2;
+}
+
 .paper-bot-modal__close {
-  border: 1px solid var(--line);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   padding: 10px 15px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--ink);
+  background: rgba(255, 255, 255, 0.1);
+  color: #eef6ff;
   font: inherit;
   font-weight: 900;
   cursor: pointer;
@@ -1540,9 +1549,11 @@ body::before {
 
 .paper-bot-modal__table-wrap {
   overflow: auto;
-  border: 1px solid var(--line);
+  min-height: 0;
+  border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(8, 17, 27, 0.72);
+  scrollbar-gutter: stable;
 }
 
 .paper-bot-table--transactions {
@@ -1553,11 +1564,33 @@ body::before {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: rgba(9, 19, 29, 0.94);
+  background: #0b1622;
+  color: #7bd9d2;
 }
 
-html:not([data-theme="dark"]) .paper-bot-table--transactions thead th {
-  background: rgba(243, 237, 228, 0.96);
+.paper-bot-modal .paper-bot-table td {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  color: #eef6ff;
+}
+
+.paper-bot-modal .paper-bot-table tbody tr:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.paper-bot-modal .paper-bot-table__reason {
+  color: #b8c7d9 !important;
+}
+
+.paper-bot-modal .paper-bot-table td[data-tone="positive"] {
+  color: #7bd9d2;
+}
+
+.paper-bot-modal .paper-bot-table td[data-tone="negative"] {
+  color: #ff9a8e;
+}
+
+.paper-bot-modal .paper-bot-table td[data-tone="neutral"] {
+  color: #d7e1ed;
 }
 
 .report-header {
