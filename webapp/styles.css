@@ -1557,7 +1557,7 @@ body::before {
 }
 
 .paper-bot-modal .paper-bot-table--transactions {
-  min-width: 1040px;
+  min-width: 1180px;
 }
 
 .paper-bot-modal .paper-bot-table--transactions thead th {

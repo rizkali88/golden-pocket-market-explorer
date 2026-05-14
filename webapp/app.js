@@ -5730,10 +5730,40 @@ function getTradeRealizedPnl(trade) {
   return null;
 }
 
-function makePaperBotTransactionRow(trade) {
+function getTradeEntryPrice(trade, olderTrades = []) {
+  const directValue = Number(trade?.entryPrice ?? trade?.buyPrice ?? trade?.openPrice);
+  if (Number.isFinite(directValue) && directValue > 0) {
+    return directValue;
+  }
+  const type = String(trade?.type ?? "NOTE").toUpperCase();
+  const tradePrice = Number(trade?.price);
+  if (type === "BUY" && Number.isFinite(tradePrice) && tradePrice > 0) {
+    return tradePrice;
+  }
+  const ticker = String(trade?.ticker ?? "").toUpperCase();
+  if (type !== "SELL" || !ticker) {
+    return null;
+  }
+  const shares = Number(trade?.shares);
+  const matchingBuy = olderTrades.find((candidate) => {
+    if (String(candidate?.type ?? "").toUpperCase() !== "BUY") {
+      return false;
+    }
+    if (String(candidate?.ticker ?? "").toUpperCase() !== ticker) {
+      return false;
+    }
+    const candidateShares = Number(candidate?.shares);
+    return !Number.isFinite(shares) || !Number.isFinite(candidateShares) || Math.abs(candidateShares - shares) < 0.0001;
+  });
+  const inferredPrice = Number(matchingBuy?.entryPrice ?? matchingBuy?.price);
+  return Number.isFinite(inferredPrice) && inferredPrice > 0 ? inferredPrice : null;
+}
+
+function makePaperBotTransactionRow(trade, index = 0, trades = []) {
   const type = String(trade?.type ?? "NOTE").toUpperCase();
   const shares = Number(trade?.shares);
   const price = Number(trade?.price);
+  const entryPrice = getTradeEntryPrice(trade, trades.slice(index + 1));
   const value = Number(trade?.value);
   const realizedPnl = getTradeRealizedPnl(trade);
   const fallbackValue =
@@ -5746,6 +5776,7 @@ function makePaperBotTransactionRow(trade) {
     <td><span class="paper-bot-trade paper-bot-trade--${escapeHtml(type.toLowerCase())}">${escapeHtml(type)}</span></td>
     <td>${escapeHtml(trade?.ticker ?? "")}</td>
     <td>${Number.isFinite(shares) ? escapeHtml(formatNumber(shares, 4)) : "--"}</td>
+    <td>${Number.isFinite(entryPrice) ? escapeHtml(formatMoney(entryPrice)) : "--"}</td>
     <td>${Number.isFinite(price) ? escapeHtml(formatMoney(price)) : "--"}</td>
     <td>${Number.isFinite(value) ? escapeHtml(formatMoney(value)) : fallbackValue == null ? "--" : escapeHtml(formatMoney(fallbackValue))}</td>
     <td${pnlTone ? ` data-tone="${pnlTone}"` : ""}>${realizedPnl == null ? "--" : escapeHtml(formatSignedMoney(realizedPnl))}</td>
@@ -5767,7 +5798,7 @@ function renderPaperBotTransactionsModal() {
   paperBotTransactionsBody.replaceChildren(
     ...(trades.length
       ? trades.map(makePaperBotTransactionRow)
-      : [makePaperBotEmptyRow("No paper trades have been recorded yet.", 8)]),
+      : [makePaperBotEmptyRow("No paper trades have been recorded yet.", 9)]),
   );
 }
 

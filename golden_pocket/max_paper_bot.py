@@ -882,15 +882,16 @@ def run_max_bot(
         signal = signals.get(normalized)
         if not signal or not signal.get("levels"):
             continue
-        update_position_from_signal(position, signal)
         levels = signal["levels"]
         price = number(levels.get("price"), 0.0) or 0.0
         shares = number(position.get("shares"), 0.0) or 0.0
         entry_price = number(position.get("entryPrice"), price) or price
+        stored_stop = number(position.get("stop"), levels.get("stop")) or 0.0
+        stored_target2 = number(position.get("target2"), levels.get("target2")) or math.inf
         exit_reason = None
-        if price <= (number(position.get("stop"), levels.get("stop")) or 0.0):
+        if price <= stored_stop:
             exit_reason = "Max exit: price touched the technical stop."
-        elif price >= (number(position.get("target2"), levels.get("target2")) or math.inf):
+        elif stored_target2 > entry_price and price >= stored_target2:
             exit_reason = "Max exit: price reached the TP2 objective."
         elif signal.get("verdict") == "Avoid" or (number(signal.get("score"), 0.0) or 0.0) < 48:
             exit_reason = "Max exit: technical thesis degraded to Avoid."
@@ -907,12 +908,17 @@ def run_max_bot(
                     "type": "SELL",
                     "ticker": normalized,
                     "shares": shares,
+                    "entryPrice": round(entry_price, 4),
+                    "exitPrice": round(price, 4),
                     "price": round(price, 4),
                     "value": round(value, 2),
+                    "realizedPnl": round(pnl, 2),
                     "pnl": round(pnl, 2),
                     "reason": exit_reason,
                 },
             )
+        else:
+            update_position_from_signal(position, signal)
 
     open_tickers = {str(ticker).upper() for ticker in state.get("positions", {})}
     candidates = sorted(

@@ -87,6 +87,64 @@ class MaxPaperBotTests(unittest.TestCase):
         self.assertEqual(profiles[0]["livePrice"], 62.0)
         self.assertEqual(profiles[0]["rangePositionPct"], 70.0)
 
+    def test_does_not_exit_tp2_from_recalculated_lower_target(self) -> None:
+        state = {
+            "positions": {
+                "HOLD": {
+                    "ticker": "HOLD",
+                    "shares": 1,
+                    "entryPrice": 100.0,
+                    "lastPrice": 100.0,
+                    "stop": 70.0,
+                    "target2": 120.0,
+                }
+            },
+            "trades": [],
+            "cash": 9900,
+        }
+        next_state = run_max_bot(
+            [
+                make_profile(
+                    "HOLD",
+                    price=100.0,
+                    fiftyTwoWeekLow=80.0,
+                    fiftyTwoWeekHigh=90.0,
+                    rangePositionPct=50.0,
+                )
+            ],
+            state,
+        )
+        self.assertIn("HOLD", next_state["positions"])
+        self.assertEqual(next_state["trades"], [])
+
+    def test_sell_trade_records_entry_price_and_realized_pnl(self) -> None:
+        state = {
+            "positions": {
+                "EXIT": {
+                    "ticker": "EXIT",
+                    "shares": 2,
+                    "entryPrice": 100.0,
+                    "lastPrice": 100.0,
+                    "stop": 70.0,
+                    "target2": 120.0,
+                }
+            },
+            "trades": [],
+            "cash": 9800,
+            "realizedPnl": 0,
+        }
+        next_state = run_max_bot(
+            [make_profile("EXIT", price=125.0, fiftyTwoWeekLow=80.0, fiftyTwoWeekHigh=130.0)],
+            state,
+        )
+        self.assertNotIn("EXIT", next_state["positions"])
+        trade = next_state["trades"][0]
+        self.assertEqual(trade["type"], "SELL")
+        self.assertEqual(trade["entryPrice"], 100.0)
+        self.assertEqual(trade["exitPrice"], 125.0)
+        self.assertEqual(trade["realizedPnl"], 50.0)
+        self.assertEqual(trade["pnl"], 50.0)
+
 
 if __name__ == "__main__":
     unittest.main()
