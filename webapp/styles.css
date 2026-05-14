@@ -1202,6 +1202,22 @@ body::before {
   line-height: 1.6;
 }
 
+#paper-bot-live-status {
+  display: block;
+  margin-top: 6px;
+  color: var(--accent);
+  font-weight: 900;
+}
+
+#paper-bot-live-status[data-state="missing"],
+#paper-bot-live-status[data-state="warning"] {
+  color: var(--warn);
+}
+
+#paper-bot-live-status[data-state="error"] {
+  color: var(--accent-2);
+}
+
 .paper-bot-actions {
   display: flex;
   flex-wrap: wrap;

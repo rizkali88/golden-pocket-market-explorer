@@ -1,0 +1,94 @@
+name: Run Max Paper Bot
+
+on:
+  workflow_dispatch:
+  schedule:
+    # GitHub schedules use UTC. This runs every 15 minutes on weekdays
+    # across the regular US market session window.
+    - cron: "*/15 13-20 * * 1-5"
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: max-paper-bot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  run-max:
+    name: Refresh Max Paper Ledger
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run Max autonomous paper bot
+        env:
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FMP_API_KEY:-}" ]; then
+            echo "FMP_API_KEY secret is required for Max's live paper bot workflow."
+            exit 1
+          fi
+          python build_max_paper_bot.py \
+            --profiles-path webapp/data/research_profiles.json \
+            --state-path webapp/data/max_bot_state.json \
+            --js-path webapp/data/max_bot_state.js \
+            --max-open-positions 8 \
+            --quote-candidate-limit 250 \
+            --quote-batch-size 100
+
+      - name: Commit Max paper state
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add webapp/data/max_bot_state.js webapp/data/max_bot_state.json
+          if git diff --cached --quiet; then
+            echo "No Max paper state changes to commit."
+          else
+            git commit -m "Refresh Max paper bot state [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Prepare Pages artifact
+        run: |
+          rm -rf dist
+          mkdir -p dist
+          cp -R webapp/. dist/
+          find dist/data -maxdepth 1 -name "*.json" -delete
+
+      - name: Upload webapp artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
+  deploy:
+    name: Deploy To GitHub Pages
+    needs: run-max
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy site
+        id: deployment
+        uses: actions/deploy-pages@v4

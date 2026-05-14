@@ -1044,6 +1044,7 @@ const paperBotReturn = document.querySelector("#paper-bot-return");
 const paperBotMetrics = document.querySelector("#paper-bot-metrics");
 const paperBotInstruction = document.querySelector("#paper-bot-instruction");
 const paperBotReason = document.querySelector("#paper-bot-reason");
+const paperBotLiveStatus = document.querySelector("#paper-bot-live-status");
 const paperBotPositions = document.querySelector("#paper-bot-positions");
 const paperBotPositionCount = document.querySelector("#paper-bot-position-count");
 const paperBotActivity = document.querySelector("#paper-bot-activity");
@@ -1096,7 +1097,9 @@ const paperBotMarkPriceCache = new Map();
 const decisionModelCache = new Map();
 let maxExecutionLiveTimer = null;
 let paperBotLiveTimer = null;
+let paperBotCloudStateTimer = null;
 let paperBotLiveRefreshInFlight = false;
+let paperBotCloudStateRefreshInFlight = false;
 
 const maxExecutionLiveConfig = {
   provider: "fmp",
@@ -1114,6 +1117,7 @@ const PAPER_BOT_STORAGE_KEY = "golden-pocket-paper-bot-v1";
 const PAPER_BOT_STARTING_CASH = 10000;
 const PAPER_BOT_MAX_POSITION_FRACTION = 0.2;
 const PAPER_BOT_RISK_FRACTION = 0.01;
+const PAPER_BOT_CLOUD_REFRESH_SECONDS = 60;
 let paperBotState = loadPaperBotState();
 
 const MAX_EXECUTION_RANGES = [
@@ -1627,6 +1631,10 @@ function hasFmpLiveSource() {
   return Boolean(getFmpProxyBaseUrl() || getLocalFmpApiKey());
 }
 
+function hasPaperBotLiveSource() {
+  return Boolean(getFmpProxyBaseUrl() || getLocalFmpApiKey());
+}
+
 function getLivePollSeconds() {
   return clampNumber(Number(maxExecutionLiveConfig.pollSeconds) || 20, 5, 300);
 }
@@ -1719,6 +1727,9 @@ function buildFmpRequestUrl(kind, params = {}) {
     return null;
   }
   searchParams.set("apikey", localKey);
+  if (kind === "batch-quote") {
+    return `${FMP_DIRECT_BASE_URL}/batch-quote-short?${searchParams.toString()}`;
+  }
   if (kind === "quote") {
     return `${FMP_DIRECT_BASE_URL}/quote-short?${searchParams.toString()}`;
   }
@@ -1894,6 +1905,66 @@ async function fetchFmpQuote(company) {
     fmpQuoteCache.set(cacheKey, quote);
   }
   return quote;
+}
+
+function parseFmpQuoteRows(payload) {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+  if (Array.isArray(payload?.data)) {
+    return payload.data;
+  }
+  if (payload && typeof payload === "object") {
+    return [payload];
+  }
+  return [];
+}
+
+async function fetchFmpBatchQuotes(tickers) {
+  const symbols = [...new Set(tickers.map((ticker) => String(ticker || "").toUpperCase()).filter(Boolean))];
+  if (!symbols.length || !hasPaperBotLiveSource()) {
+    return new Map();
+  }
+  const cacheWindowMs = Math.max(4000, getLivePollSeconds() * 1000 * 0.75);
+  const missingSymbols = symbols.filter((symbol) => {
+    const cached = fmpQuoteCache.get(symbol);
+    return !cached || Date.now() - cached.fetchedAt >= cacheWindowMs;
+  });
+  if (!missingSymbols.length) {
+    return new Map(symbols.map((symbol) => [symbol, fmpQuoteCache.get(symbol)]).filter(([, quote]) => quote?.price));
+  }
+
+  const url = buildFmpRequestUrl("batch-quote", { symbols: missingSymbols.join(",") });
+  if (!url) {
+    return new Map();
+  }
+
+  const payload = await fetchJson(url, 12000);
+  const fetchedAt = Date.now();
+  parseFmpQuoteRows(payload).forEach((row) => {
+    const symbol = String(row?.symbol ?? row?.ticker ?? "").toUpperCase();
+    const price = Number(row?.price ?? row?.bidPrice ?? row?.askPrice);
+    if (!symbol || !Number.isFinite(price) || price <= 0) {
+      return;
+    }
+    fmpQuoteCache.set(symbol, {
+      price,
+      volume: Number(row.volume),
+      fetchedAt,
+    });
+  });
+  const unresolvedSymbols = missingSymbols.filter((symbol) => !fmpQuoteCache.get(symbol)?.price);
+  if (unresolvedSymbols.length) {
+    await Promise.all(
+      unresolvedSymbols.map(async (symbol) => {
+        const quote = await fetchFmpQuote({ ticker: symbol });
+        if (quote?.price) {
+          fmpQuoteCache.set(symbol, quote);
+        }
+      }),
+    );
+  }
+  return new Map(symbols.map((symbol) => [symbol, fmpQuoteCache.get(symbol)]).filter(([, quote]) => quote?.price));
 }
 
 function mergeLiveQuoteIntoHistory(history, liveQuote) {
@@ -4995,6 +5066,66 @@ function savePaperBotState() {
   window.localStorage.setItem(PAPER_BOT_STORAGE_KEY, JSON.stringify(paperBotState));
 }
 
+function loadPaperBotCloudStateScript() {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = `./data/max_bot_state.js?v=${Date.now()}`;
+    script.async = true;
+    script.onload = () => {
+      script.remove();
+      resolve(normalizePaperBotState(window.GOLDEN_POCKET_MAX_BOT));
+    };
+    script.onerror = () => {
+      script.remove();
+      reject(new Error("Could not load Max paper state"));
+    };
+    document.head.append(script);
+  });
+}
+
+async function refreshPaperBotCloudState(options = {}) {
+  if (paperBotState.mode !== "max_autonomous_cloud" || paperBotCloudStateRefreshInFlight) {
+    return;
+  }
+  paperBotCloudStateRefreshInFlight = true;
+  try {
+    const nextState = await loadPaperBotCloudStateScript();
+    if (!nextState || nextState.mode !== "max_autonomous_cloud") {
+      return;
+    }
+    if (nextState.generatedAt && nextState.generatedAt !== paperBotState.generatedAt) {
+      paperBotState = nextState;
+      paperBotMarkPriceCache.clear();
+      renderPaperBotPanelForCurrentSelection();
+      schedulePaperBotLiveRefresh({ immediate: true });
+      return;
+    }
+    if (options.immediate) {
+      renderPaperBotPanelForCurrentSelection();
+    }
+  } catch (error) {
+    if (options.immediate) {
+      setPaperBotLiveStatus("Max cloud ledger is cached locally; live marks still run if FMP is connected.", "warning");
+    }
+  } finally {
+    paperBotCloudStateRefreshInFlight = false;
+  }
+}
+
+function schedulePaperBotCloudStateRefresh() {
+  if (paperBotCloudStateTimer) {
+    window.clearInterval(paperBotCloudStateTimer);
+    paperBotCloudStateTimer = null;
+  }
+  if (paperBotState.mode !== "max_autonomous_cloud") {
+    return;
+  }
+  refreshPaperBotCloudState({ immediate: true });
+  paperBotCloudStateTimer = window.setInterval(() => {
+    refreshPaperBotCloudState();
+  }, PAPER_BOT_CLOUD_REFRESH_SECONDS * 1000);
+}
+
 function formatSignedMoney(value) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) {
@@ -5376,7 +5507,19 @@ function getPaperBotDecisionContext(company = companyUniverseById.get(currentCom
   return { company: contextCompany, opportunity, resolved, johnView, maxView, decision };
 }
 
+function setPaperBotLiveStatus(message, state = "idle") {
+  if (!paperBotLiveStatus) {
+    return;
+  }
+  paperBotLiveStatus.textContent = message;
+  paperBotLiveStatus.dataset.state = state;
+}
+
 function renderPaperBotPanelForCurrentSelection(plan = null) {
+  if (paperBotState.mode === "max_autonomous_cloud") {
+    renderPaperBotPanel(null, null, null, null, plan);
+    return;
+  }
   const context = getPaperBotDecisionContext();
   if (!context) {
     renderPaperBotPanel();
@@ -5392,29 +5535,54 @@ function renderPaperBotPanelForCurrentSelection(plan = null) {
 }
 
 async function refreshPaperBotLiveMarks(options = {}) {
-  if (paperBotState.mode === "max_autonomous_cloud") {
-    renderPaperBotPanelForCurrentSelection();
-    return;
-  }
   if (paperBotLiveRefreshInFlight) {
     return;
   }
   const positions = Object.values(paperBotState.positions ?? {});
-  if (!positions.length || !hasFmpLiveSource()) {
+  if (!positions.length) {
+    setPaperBotLiveStatus("Max has no open paper positions to mark.", "idle");
+    renderPaperBotPanelForCurrentSelection();
+    return;
+  }
+  if (!hasPaperBotLiveSource()) {
+    setPaperBotLiveStatus("Add an FMP key to stream live marks for open paper positions.", "missing");
     renderPaperBotPanelForCurrentSelection();
     return;
   }
 
   paperBotLiveRefreshInFlight = true;
+  setPaperBotLiveStatus("Refreshing Max paper marks...", "loading");
   try {
+    const tickers = positions.map(getPaperBotTicker);
+    let quoteMap = new Map();
+    try {
+      quoteMap = await fetchFmpBatchQuotes(tickers);
+    } catch (error) {
+      quoteMap = new Map();
+      await Promise.all(
+        positions.map(async (position) => {
+          const ticker = getPaperBotTicker(position);
+          const company = companyUniverseByTicker.get(ticker);
+          if (!company) {
+            return;
+          }
+          fmpQuoteCache.delete(ticker);
+          const quote = await fetchFmpQuote(company);
+          if (quote?.price) {
+            quoteMap.set(ticker, quote);
+          }
+        }),
+      );
+    }
+
+    let updatedCount = 0;
     for (const position of positions) {
       const ticker = getPaperBotTicker(position);
       const company = companyUniverseByTicker.get(ticker);
       if (!company) {
         continue;
       }
-      fmpQuoteCache.delete(ticker);
-      const quote = await fetchFmpQuote(company);
+      const quote = quoteMap.get(ticker);
       if (!quote?.price) {
         continue;
       }
@@ -5422,9 +5590,10 @@ async function refreshPaperBotLiveMarks(options = {}) {
       if (!paperBotState.positions[ticker]) {
         continue;
       }
+      updatedCount += 1;
       paperBotState.positions[ticker].lastPrice = quote.price;
 
-      if (options.execute === true && paperBotState.autoEnabled) {
+      if (paperBotState.mode !== "max_autonomous_cloud" && options.execute === true && paperBotState.autoEnabled) {
         const markedCompany = {
           ...company,
           price: quote.price,
@@ -5453,34 +5622,47 @@ async function refreshPaperBotLiveMarks(options = {}) {
         }
       }
     }
-    savePaperBotState();
+    if (paperBotState.mode !== "max_autonomous_cloud") {
+      savePaperBotState();
+    }
+    setPaperBotLiveStatus(
+      updatedCount
+        ? `Live paper marks updated for ${updatedCount}/${positions.length} open positions.`
+        : "FMP returned no fresh paper marks; showing cached marks.",
+      updatedCount ? "on" : "warning",
+    );
     renderPaperBotPanelForCurrentSelection();
     if (Object.keys(paperBotState.positions ?? {}).length === 0 && paperBotLiveTimer) {
       window.clearInterval(paperBotLiveTimer);
       paperBotLiveTimer = null;
     }
+  } catch (error) {
+    setPaperBotLiveStatus("Paper bot live feed could not refresh; cached marks remain visible.", "error");
+    renderPaperBotPanelForCurrentSelection();
   } finally {
     paperBotLiveRefreshInFlight = false;
   }
 }
 
 function schedulePaperBotLiveRefresh(options = {}) {
-  if (paperBotState.mode === "max_autonomous_cloud") {
-    return;
-  }
   if (paperBotLiveTimer) {
     window.clearInterval(paperBotLiveTimer);
     paperBotLiveTimer = null;
   }
   const hasOpenPositions = Object.keys(paperBotState.positions ?? {}).length > 0;
-  if (!hasOpenPositions || !hasFmpLiveSource()) {
+  if (!hasOpenPositions) {
+    setPaperBotLiveStatus("Max has no open paper positions to mark.", "idle");
+    return;
+  }
+  if (!hasPaperBotLiveSource()) {
+    setPaperBotLiveStatus("Add an FMP key to stream live marks for open paper positions.", "missing");
     return;
   }
   if (options.immediate) {
-    refreshPaperBotLiveMarks({ execute: paperBotState.autoEnabled });
+    refreshPaperBotLiveMarks({ execute: paperBotState.mode !== "max_autonomous_cloud" && paperBotState.autoEnabled });
   }
   paperBotLiveTimer = window.setInterval(() => {
-    refreshPaperBotLiveMarks({ execute: paperBotState.autoEnabled });
+    refreshPaperBotLiveMarks({ execute: paperBotState.mode !== "max_autonomous_cloud" && paperBotState.autoEnabled });
   }, getLivePollSeconds() * 1000);
 }
 
@@ -6315,6 +6497,7 @@ themeToggle.addEventListener("click", () => {
 initializeTheme();
 initializeLayoutMode();
 renderPaperBotPanelForCurrentSelection();
+schedulePaperBotCloudStateRefresh();
 schedulePaperBotLiveRefresh();
 refreshExplorer();
 renderScenario("base");
