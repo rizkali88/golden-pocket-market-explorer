@@ -1241,6 +1241,17 @@ body::before {
     transform 180ms ease;
 }
 
+.paper-bot-button span {
+  display: inline-flex;
+  min-width: 24px;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--accent);
+  font-size: 0.72rem;
+}
+
 .paper-bot-button:hover:not(:disabled) {
   transform: translateY(-1px);
   border-color: rgba(99, 210, 200, 0.44);
@@ -1376,7 +1387,7 @@ body::before {
 }
 
 .paper-bot-data-grid {
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.25fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .paper-bot-table-card {
@@ -1455,6 +1466,98 @@ body::before {
 .paper-bot-trade--sell {
   border-color: rgba(232, 111, 97, 0.6);
   background: rgba(232, 111, 97, 0.12);
+}
+
+.paper-bot-modal-open {
+  overflow: hidden;
+}
+
+.paper-bot-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.paper-bot-modal[hidden] {
+  display: none;
+}
+
+.paper-bot-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 9, 13, 0.68);
+  backdrop-filter: blur(10px);
+}
+
+.paper-bot-modal__dialog {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(1180px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  gap: 18px;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  padding: 22px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)),
+    var(--panel);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.34);
+}
+
+.paper-bot-modal__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: start;
+}
+
+.paper-bot-modal__header h2 {
+  margin-top: 4px;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  line-height: 0.98;
+}
+
+.paper-bot-modal__header p:last-child {
+  max-width: 64ch;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.paper-bot-modal__close {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 10px 15px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.paper-bot-modal__table-wrap {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.paper-bot-table--transactions {
+  min-width: 1040px;
+}
+
+.paper-bot-table--transactions thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgba(9, 19, 29, 0.94);
+}
+
+html:not([data-theme="dark"]) .paper-bot-table--transactions thead th {
+  background: rgba(243, 237, 228, 0.96);
 }
 
 .report-header {

@@ -1047,8 +1047,12 @@ const paperBotReason = document.querySelector("#paper-bot-reason");
 const paperBotLiveStatus = document.querySelector("#paper-bot-live-status");
 const paperBotPositions = document.querySelector("#paper-bot-positions");
 const paperBotPositionCount = document.querySelector("#paper-bot-position-count");
-const paperBotActivity = document.querySelector("#paper-bot-activity");
-const paperBotActivityCount = document.querySelector("#paper-bot-activity-count");
+const paperBotTransactionsOpen = document.querySelector("#paper-bot-transactions-open");
+const paperBotTransactionsCount = document.querySelector("#paper-bot-transactions-count");
+const paperBotTransactionsModal = document.querySelector("#paper-bot-transactions-modal");
+const paperBotTransactionsClose = document.querySelector("#paper-bot-transactions-close");
+const paperBotTransactionsBody = document.querySelector("#paper-bot-transactions-body");
+const paperBotTransactionsSummary = document.querySelector("#paper-bot-transactions-summary");
 const layoutSections = [...document.querySelectorAll("[data-layout-id]")].sort(
   (left, right) => Number(left.dataset.layoutId) - Number(right.dataset.layoutId),
 );
@@ -5718,6 +5722,67 @@ function makePaperBotEmptyRow(message, columns) {
   return row;
 }
 
+function makePaperBotTransactionRow(trade) {
+  const type = String(trade?.type ?? "NOTE").toUpperCase();
+  const shares = Number(trade?.shares);
+  const price = Number(trade?.price);
+  const value = Number(trade?.value);
+  const pnl = Number(trade?.pnl);
+  const fallbackValue =
+    Number.isFinite(shares) && Number.isFinite(price) ? shares * price : null;
+  const pnlTone = Number.isFinite(pnl) ? (pnl < 0 ? "negative" : "positive") : "";
+  const row = document.createElement("tr");
+  row.innerHTML = `
+    <td>${escapeHtml(formatPaperBotTime(trade?.time))}</td>
+    <td><span class="paper-bot-trade paper-bot-trade--${escapeHtml(type.toLowerCase())}">${escapeHtml(type)}</span></td>
+    <td>${escapeHtml(trade?.ticker ?? "")}</td>
+    <td>${Number.isFinite(shares) ? escapeHtml(formatNumber(shares, 4)) : "--"}</td>
+    <td>${Number.isFinite(price) ? escapeHtml(formatMoney(price)) : "--"}</td>
+    <td>${Number.isFinite(value) ? escapeHtml(formatMoney(value)) : fallbackValue == null ? "--" : escapeHtml(formatMoney(fallbackValue))}</td>
+    <td${pnlTone ? ` data-tone="${pnlTone}"` : ""}>${Number.isFinite(pnl) ? escapeHtml(formatSignedMoney(pnl)) : "--"}</td>
+    <td class="paper-bot-table__reason">${escapeHtml(trade?.reason ?? "")}</td>
+  `;
+  return row;
+}
+
+function renderPaperBotTransactionsModal() {
+  const trades = Array.isArray(paperBotState?.trades) ? paperBotState.trades : [];
+  if (paperBotTransactionsSummary) {
+    paperBotTransactionsSummary.textContent = trades.length
+      ? `${trades.length} recorded paper transaction${trades.length === 1 ? "" : "s"}, newest first.`
+      : "No recorded paper transactions yet.";
+  }
+  if (!paperBotTransactionsBody) {
+    return;
+  }
+  paperBotTransactionsBody.replaceChildren(
+    ...(trades.length
+      ? trades.map(makePaperBotTransactionRow)
+      : [makePaperBotEmptyRow("No paper trades have been recorded yet.", 8)]),
+  );
+}
+
+function openPaperBotTransactionsModal() {
+  if (!paperBotTransactionsModal) {
+    return;
+  }
+  renderPaperBotTransactionsModal();
+  paperBotTransactionsModal.hidden = false;
+  paperBotTransactionsModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("paper-bot-modal-open");
+  paperBotTransactionsClose?.focus();
+}
+
+function closePaperBotTransactionsModal() {
+  if (!paperBotTransactionsModal) {
+    return;
+  }
+  paperBotTransactionsModal.hidden = true;
+  paperBotTransactionsModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("paper-bot-modal-open");
+  paperBotTransactionsOpen?.focus();
+}
+
 function getMaxCloudBotPlanSummary(snapshot) {
   const latestTrade = paperBotState.trades?.[0];
   const generatedLabel = paperBotState.generatedAt
@@ -5806,28 +5871,11 @@ function renderPaperBotPanel(company = null, johnView = null, maxView = null, de
         : [makePaperBotEmptyRow("No open paper positions yet.", 5)]),
     );
   }
-  if (paperBotActivityCount) {
-    paperBotActivityCount.textContent =
-      paperBotState.trades.length === 0
-        ? "No trades yet"
-        : `${paperBotState.trades.length} recorded`;
+  if (paperBotTransactionsCount) {
+    paperBotTransactionsCount.textContent = String(paperBotState.trades?.length ?? 0);
   }
-  if (paperBotActivity) {
-    paperBotActivity.replaceChildren(
-      ...(paperBotState.trades.length
-        ? paperBotState.trades.slice(0, 8).map((trade) => {
-            const row = document.createElement("tr");
-            row.innerHTML = `
-              <td>${formatPaperBotTime(trade.time)}</td>
-              <td><span class="paper-bot-trade paper-bot-trade--${String(trade.type).toLowerCase()}">${trade.type}</span></td>
-              <td>${trade.ticker}</td>
-              <td>${formatMoney(trade.value)}${hasValue(trade.pnl) ? `<small>${formatSignedMoney(trade.pnl)}</small>` : ""}</td>
-              <td class="paper-bot-table__reason">${trade.reason}</td>
-            `;
-            return row;
-          })
-        : [makePaperBotEmptyRow("Activity appears here after the bot opens or exits paper trades.", 5)]),
-    );
+  if (paperBotTransactionsModal && !paperBotTransactionsModal.hidden) {
+    renderPaperBotTransactionsModal();
   }
 }
 
@@ -6510,6 +6558,28 @@ if (paperBotEvaluate) {
 if (paperBotReset) {
   paperBotReset.addEventListener("click", resetPaperBot);
 }
+
+if (paperBotTransactionsOpen) {
+  paperBotTransactionsOpen.addEventListener("click", openPaperBotTransactionsModal);
+}
+
+if (paperBotTransactionsClose) {
+  paperBotTransactionsClose.addEventListener("click", closePaperBotTransactionsModal);
+}
+
+if (paperBotTransactionsModal) {
+  paperBotTransactionsModal.addEventListener("click", (event) => {
+    if (event.target?.matches?.("[data-paper-bot-modal-close]")) {
+      closePaperBotTransactionsModal();
+    }
+  });
+}
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && paperBotTransactionsModal && !paperBotTransactionsModal.hidden) {
+    closePaperBotTransactionsModal();
+  }
+});
 
 clearFiltersButton.addEventListener("click", resetFilters);
 

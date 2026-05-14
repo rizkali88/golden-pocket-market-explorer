@@ -91,6 +91,10 @@
                 </p>
               </div>
               <div class="paper-bot-actions" aria-label="Paper bot controls">
+                <button type="button" class="paper-bot-button paper-bot-button--ghost" id="paper-bot-transactions-open">
+                  View transactions
+                  <span id="paper-bot-transactions-count">0</span>
+                </button>
                 <button type="button" class="paper-bot-button" id="paper-bot-auto-toggle" aria-pressed="true" hidden>Max cloud: On</button>
                 <button type="button" class="paper-bot-button" id="paper-bot-evaluate" hidden>Manual evaluate</button>
                 <button type="button" class="paper-bot-button paper-bot-button--ghost" id="paper-bot-reset" hidden>Reset local $10k</button>
@@ -129,26 +133,6 @@
                       </tr>
                     </thead>
                     <tbody id="paper-bot-positions"></tbody>
-                  </table>
-                </div>
-              </article>
-              <article class="paper-bot-table-card">
-                <div class="paper-bot-table-card__header">
-                  <span>Bot activity</span>
-                  <small id="paper-bot-activity-count">No trades yet</small>
-                </div>
-                <div class="paper-bot-table-wrap">
-                  <table class="paper-bot-table">
-                    <thead>
-                      <tr>
-                        <th>Time</th>
-                        <th>Action</th>
-                        <th>Ticker</th>
-                        <th>Value</th>
-                        <th>Reason</th>
-                      </tr>
-                    </thead>
-                    <tbody id="paper-bot-activity"></tbody>
                   </table>
                 </div>
               </article>
@@ -361,6 +345,37 @@
 
     <aside class="layout-legend" id="layout-legend" hidden aria-live="polite"></aside>
 
+    <div class="paper-bot-modal" id="paper-bot-transactions-modal" hidden aria-hidden="true">
+      <div class="paper-bot-modal__backdrop" data-paper-bot-modal-close></div>
+      <section class="paper-bot-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="paper-bot-transactions-title">
+        <div class="paper-bot-modal__header">
+          <div>
+            <p class="eyebrow">Max Paper Bot</p>
+            <h2 id="paper-bot-transactions-title">Transaction history</h2>
+            <p id="paper-bot-transactions-summary">Every recorded paper trade will appear here.</p>
+          </div>
+          <button type="button" class="paper-bot-modal__close" id="paper-bot-transactions-close" aria-label="Close transactions">Close</button>
+        </div>
+        <div class="paper-bot-modal__table-wrap">
+          <table class="paper-bot-table paper-bot-table--transactions">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Action</th>
+                <th>Ticker</th>
+                <th>Shares</th>
+                <th>Price</th>
+                <th>Value</th>
+                <th>P/L</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody id="paper-bot-transactions-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
     <script>
       (() => {
         const storageKey = "golden-pocket-paper-bot-v1";
@@ -548,31 +563,7 @@
         }
 
         const trades = Array.isArray(state.trades) ? state.trades : [];
-        setText(
-          "#paper-bot-activity-count",
-          trades.length ? `${trades.length} recorded` : "No trades yet",
-        );
-        const activityBody = document.querySelector("#paper-bot-activity");
-        if (activityBody) {
-          activityBody.replaceChildren(
-            ...(trades.length
-              ? trades.slice(0, 8).map((trade) => {
-                  const type = String(trade?.type ?? "NOTE").toUpperCase();
-                  const value = getNumber(trade?.value, getNumber(trade?.shares) * getNumber(trade?.price));
-                  const pnl = Number(trade?.pnl);
-                  const row = document.createElement("tr");
-                  row.innerHTML = `
-                    <td>${formatTime(trade?.time)}</td>
-                    <td><span class="paper-bot-trade paper-bot-trade--${escapeHtml(type.toLowerCase())}">${escapeHtml(type)}</span></td>
-                    <td>${escapeHtml(trade?.ticker ?? "")}</td>
-                    <td>${formatMoney(value)}${Number.isFinite(pnl) ? `<small>${formatSignedMoney(pnl)}</small>` : ""}</td>
-                    <td class="paper-bot-table__reason">${escapeHtml(trade?.reason ?? "")}</td>
-                  `;
-                  return row;
-                })
-              : [makeEmptyRow("Activity appears here after the bot opens or exits paper trades.", 5)]),
-          );
-        }
+        setText("#paper-bot-transactions-count", String(trades.length));
       })();
     </script>
 
