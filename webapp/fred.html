@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fred Options Workspace - Golden Pocket Lab</title>
+    <link rel="stylesheet" href="./styles.css?v=20260515-fred-workspace" />
+    <link rel="stylesheet" href="./fred.styles.css?v=20260515-fred-workspace" />
+  </head>
+  <body class="fred-page">
+    <header class="fred-topbar">
+      <a class="fred-brand" href="./">
+        <span class="fred-brand__mark">F</span>
+        <span>
+          <small>Golden Pocket Lab</small>
+          <strong>Fred Options Desk</strong>
+          <em>Research Workspace</em>
+        </span>
+      </a>
+      <nav class="fred-nav" aria-label="Workspace navigation">
+        <a href="./">Production</a>
+        <a href="./workbench.html">Non Production</a>
+        <a aria-current="page" href="./fred.html">Fred Options</a>
+      </nav>
+    </header>
+
+    <main class="fred-shell">
+      <section class="fred-hero panel">
+        <div class="fred-hero__copy">
+          <p class="eyebrow">Welcome Fred</p>
+          <h1>Options command center for short-duration, high-convexity trades.</h1>
+          <p>
+            Fred joins as our senior options specialist: PhD-level math, 15+ years trading options, and a mandate to
+            translate market regime, earnings behavior, volatility, strike, and maturity into visible trade plans.
+          </p>
+          <div class="fred-hero__actions">
+            <a href="#fred-stack">Open the stack</a>
+            <a href="#fred-visibility">Audit Fred's work</a>
+          </div>
+        </div>
+        <aside class="fred-mandate">
+          <span>Operating mandate</span>
+          <strong>Asymmetric upside. Time-boxed exposure. No invisible risk.</strong>
+          <ul>
+            <li>Prefer liquid contracts with tight spreads and clear exits.</li>
+            <li>Separate growth momentum, value re-rating, and earnings-event playbooks.</li>
+            <li>Every ticket must show thesis, expected move, Greeks, expiration, strike logic, and invalidation.</li>
+          </ul>
+        </aside>
+      </section>
+
+      <section class="fred-section" id="fred-stack">
+        <div class="fred-section__header">
+          <p class="eyebrow">Fred Stack</p>
+          <h2>What Fred needs before any option ticket is trusted</h2>
+        </div>
+        <div class="fred-stack-grid" id="fred-stack-grid"></div>
+      </section>
+
+      <section class="fred-section fred-playbook-section">
+        <div class="fred-section__header">
+          <p class="eyebrow">Strategy Playbooks</p>
+          <h2>Different weapons for growth, value, earnings, and volatility dislocations</h2>
+        </div>
+        <div class="fred-playbook-grid" id="fred-playbook-grid"></div>
+      </section>
+
+      <section class="fred-section fred-workflow">
+        <div class="fred-section__header">
+          <p class="eyebrow">Workflow</p>
+          <h2>How Fred turns a market read into an options ticket</h2>
+        </div>
+        <div class="fred-flow" aria-label="Fred options workflow">
+          <article>
+            <span>01</span>
+            <strong>Regime split</strong>
+            <p>Classify the ticker as growth, value, event-driven, or volatility dislocation.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <strong>Chain scan</strong>
+            <p>Filter by liquidity, spread, IV rank, skew, term structure, open interest, and gamma concentration.</p>
+          </article>
+          <article>
+            <span>03</span>
+            <strong>Strike and maturity</strong>
+            <p>Choose delta, expiry, and structure against expected move, breakeven, and catalyst timing.</p>
+          </article>
+          <article>
+            <span>04</span>
+            <strong>Ticket review</strong>
+            <p>Log thesis, max loss, target, stop, time stop, Greek exposures, and earnings risk.</p>
+          </article>
+          <article>
+            <span>05</span>
+            <strong>Exit discipline</strong>
+            <p>Close when target, invalidation, time decay, IV crush, or catalyst completion says the edge is gone.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="fred-section fred-visibility" id="fred-visibility">
+        <div class="fred-section__header">
+          <p class="eyebrow">Full Visibility</p>
+          <h2>See what Fred is studying, why it matters, and what still needs data</h2>
+        </div>
+        <div class="fred-visibility-grid">
+          <article class="fred-board panel">
+            <div class="fred-board__header">
+              <span>Work queue</span>
+              <strong id="fred-work-count">0 active checks</strong>
+            </div>
+            <div class="fred-work-list" id="fred-work-list"></div>
+          </article>
+          <article class="fred-board panel">
+            <div class="fred-board__header">
+              <span>Risk guardrails</span>
+              <strong>Ticket gates</strong>
+            </div>
+            <ul class="fred-checklist">
+              <li>Max loss visible before entry.</li>
+              <li>Position has planned exit and time stop.</li>
+              <li>Bid/ask spread and open interest pass liquidity screen.</li>
+              <li>Earnings IV crush risk is explicitly scored.</li>
+              <li>No trade goes live from this page without broker-side review.</li>
+            </ul>
+          </article>
+          <article class="fred-board panel fred-board--wide">
+            <div class="fred-board__header">
+              <span>Decision journal</span>
+              <strong>Transparent audit trail</strong>
+            </div>
+            <div class="fred-journal" id="fred-journal"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="fred-section fred-resources" id="fred-resources">
+        <div class="fred-section__header">
+          <p class="eyebrow">Resource Feed</p>
+          <h2>Best-in-class references Fred should keep on his desk</h2>
+          <p>
+            This library favors official exchange, OCC, regulator, and broker education sources. It is a learning and
+            research feed, not trade advice.
+          </p>
+        </div>
+        <div class="fred-filter-row" id="fred-resource-filters" aria-label="Resource filters"></div>
+        <div class="fred-resource-grid" id="fred-resource-grid"></div>
+      </section>
+    </main>
+
+    <script src="./fred.app.js?v=20260515-fred-workspace"></script>
+  </body>
+</html>

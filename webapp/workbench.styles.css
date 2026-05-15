@@ -106,6 +106,35 @@ body::before {
   justify-content: center;
 }
 
+.workspace-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: 999px;
+  padding: 11px 14px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.88rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.workspace-link:hover,
+.workspace-link:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(99, 210, 200, 0.42);
+  background: rgba(99, 210, 200, 0.12);
+}
+
+.workspace-link--fred {
+  border-color: rgba(242, 168, 90, 0.38);
+  background: linear-gradient(135deg, rgba(242, 168, 90, 0.18), rgba(99, 210, 200, 0.09));
+}
+
 .workbench-page .app-shell {
   width: min(1640px, calc(100% - 32px));
   grid-template-columns: minmax(0, 1fr);

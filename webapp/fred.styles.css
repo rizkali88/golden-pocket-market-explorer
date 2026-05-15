@@ -1,0 +1,459 @@
+.fred-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 10% 5%, rgba(242, 168, 90, 0.22), transparent 28%),
+    radial-gradient(circle at 86% 12%, rgba(99, 210, 200, 0.18), transparent 30%),
+    linear-gradient(135deg, #09131d 0%, #101c2a 48%, #17261f 100%);
+  color: #edf5ff;
+}
+
+.fred-page::before {
+  background-image:
+    linear-gradient(rgba(146, 224, 214, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(146, 224, 214, 0.05) 1px, transparent 1px);
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.5), transparent 85%);
+}
+
+.fred-topbar,
+.fred-shell {
+  width: min(1500px, calc(100% - 32px));
+  margin-inline: auto;
+}
+
+.fred-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  padding: 22px 0 12px;
+}
+
+.fred-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  color: #edf5ff;
+  text-decoration: none;
+}
+
+.fred-brand__mark {
+  width: 62px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #f2a85a, #63d2c8);
+  color: #09131d;
+  font-family: Georgia, "Palatino Linotype", serif;
+  font-size: 2rem;
+  font-weight: 900;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.3);
+}
+
+.fred-brand small,
+.fred-brand em {
+  display: block;
+  color: #98a9bb;
+  font-style: normal;
+  font-size: 0.8rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.fred-brand strong {
+  display: block;
+  margin: 2px 0;
+  font-family: Georgia, "Palatino Linotype", serif;
+  font-size: clamp(1.35rem, 3vw, 2rem);
+  line-height: 1;
+}
+
+.fred-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.fred-nav a,
+.fred-hero__actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(146, 224, 214, 0.24);
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #edf5ff;
+  font-size: 0.86rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.fred-nav a[aria-current="page"],
+.fred-nav a:hover,
+.fred-hero__actions a:hover {
+  border-color: rgba(242, 168, 90, 0.5);
+  background: rgba(242, 168, 90, 0.15);
+}
+
+.fred-shell {
+  display: grid;
+  gap: 24px;
+  padding: 12px 0 64px;
+}
+
+.fred-page .panel,
+.fred-playbook-card,
+.fred-resource-card {
+  border-color: rgba(146, 224, 214, 0.17);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.035)),
+    rgba(9, 19, 29, 0.74);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.22);
+}
+
+.fred-page .eyebrow {
+  color: #7fdad2;
+}
+
+.fred-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
+  gap: 22px;
+  padding: clamp(24px, 4vw, 44px);
+  overflow: hidden;
+}
+
+.fred-hero::after {
+  content: "";
+  position: absolute;
+  inset: auto -10% -45% auto;
+  width: 420px;
+  height: 420px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(242, 168, 90, 0.16), transparent 70%);
+}
+
+.fred-hero__copy {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 20px;
+  align-content: center;
+}
+
+.fred-hero h1,
+.fred-section h2 {
+  color: #f6f8ff;
+  font-family: Georgia, "Palatino Linotype", serif;
+}
+
+.fred-hero h1 {
+  max-width: 12ch;
+  font-size: clamp(3.4rem, 7vw, 6.8rem);
+  line-height: 0.86;
+}
+
+.fred-hero p,
+.fred-section__header p,
+.fred-mandate li,
+.fred-stack-card p,
+.fred-playbook-card p,
+.fred-playbook-card dd,
+.fred-flow p,
+.fred-work-item p,
+.fred-journal-item p,
+.fred-resource-card p,
+.fred-checklist li {
+  color: #aebbd0;
+}
+
+.fred-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.fred-mandate {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  border: 1px solid rgba(242, 168, 90, 0.26);
+  border-radius: 26px;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top right, rgba(242, 168, 90, 0.18), transparent 46%),
+    rgba(255, 255, 255, 0.05);
+}
+
+.fred-mandate span,
+.fred-board__header span,
+.fred-stack-card span,
+.fred-work-item span,
+.fred-journal-item span,
+.fred-resource-card span,
+.fred-resource-card small {
+  color: #7fdad2;
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.fred-mandate strong {
+  color: #f6f8ff;
+  font-size: 1.45rem;
+  line-height: 1.1;
+}
+
+.fred-mandate ul,
+.fred-checklist {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.fred-section {
+  display: grid;
+  gap: 16px;
+}
+
+.fred-section__header {
+  display: grid;
+  gap: 8px;
+}
+
+.fred-section__header h2 {
+  max-width: 18ch;
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  line-height: 0.94;
+}
+
+.fred-section__header p:not(.eyebrow) {
+  max-width: 72ch;
+}
+
+.fred-stack-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.fred-stack-card {
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+}
+
+.fred-stack-card strong {
+  color: #f6f8ff;
+  font-size: 1.25rem;
+}
+
+.fred-playbook-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(220px, 1fr));
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.fred-playbook-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(146, 224, 214, 0.17);
+  border-radius: 24px;
+  padding: 20px;
+}
+
+.fred-playbook-card h3,
+.fred-resource-card h3 {
+  color: #f6f8ff;
+  font-size: 1.25rem;
+}
+
+.fred-playbook-card dl,
+.fred-playbook-card div {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.fred-playbook-card dt {
+  color: #f2a85a;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.fred-playbook-card dd {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.fred-flow {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.fred-flow article {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(146, 224, 214, 0.16);
+  border-radius: 22px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.fred-flow span {
+  color: #f2a85a;
+  font-family: Georgia, "Palatino Linotype", serif;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.fred-flow strong,
+.fred-board__header strong,
+.fred-work-item strong,
+.fred-journal-item strong {
+  color: #f6f8ff;
+}
+
+.fred-visibility-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  gap: 16px;
+}
+
+.fred-board {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+}
+
+.fred-board--wide {
+  grid-column: 1 / -1;
+}
+
+.fred-board__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.fred-work-list,
+.fred-journal {
+  display: grid;
+  gap: 12px;
+}
+
+.fred-work-item,
+.fred-journal-item {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(146, 224, 214, 0.13);
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.fred-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.fred-filter-row button {
+  border: 1px solid rgba(146, 224, 214, 0.2);
+  border-radius: 999px;
+  padding: 9px 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #edf5ff;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.fred-filter-row button.is-active,
+.fred-filter-row button:hover {
+  border-color: rgba(242, 168, 90, 0.52);
+  background: rgba(242, 168, 90, 0.15);
+}
+
+.fred-resource-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.fred-resource-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(146, 224, 214, 0.17);
+  border-radius: 24px;
+  padding: 20px;
+}
+
+.fred-resource-card div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fred-resource-card a {
+  width: max-content;
+  border: 1px solid rgba(242, 168, 90, 0.36);
+  border-radius: 999px;
+  padding: 8px 11px;
+  color: #f6f8ff;
+  background: rgba(242, 168, 90, 0.12);
+  font-size: 0.8rem;
+  font-weight: 900;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+@media (max-width: 1100px) {
+  .fred-hero,
+  .fred-visibility-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fred-stack-grid,
+  .fred-flow,
+  .fred-resource-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .fred-topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .fred-nav {
+    justify-content: flex-start;
+  }
+
+  .fred-hero h1 {
+    font-size: clamp(2.8rem, 16vw, 4.4rem);
+  }
+
+  .fred-board__header,
+  .fred-resource-card div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
