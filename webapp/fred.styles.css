@@ -444,7 +444,7 @@
   }
 
   .fred-nav {
-    justify-content: flex-start;
+    display: none;
   }
 
   .fred-hero h1 {

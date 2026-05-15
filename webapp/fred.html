@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Fred Options Workspace - Golden Pocket Lab</title>
-    <link rel="stylesheet" href="./styles.css?v=20260515-fred-workspace" />
-    <link rel="stylesheet" href="./fred.styles.css?v=20260515-fred-workspace" />
+    <link rel="stylesheet" href="./styles.css?v=20260515-mobile-tabs" />
+    <link rel="stylesheet" href="./fred.styles.css?v=20260515-mobile-tabs" />
   </head>
   <body class="fred-page">
     <header class="fred-topbar">
@@ -148,6 +148,21 @@
         <div class="fred-resource-grid" id="fred-resource-grid"></div>
       </section>
     </main>
+
+    <nav class="mobile-tab-bar" aria-label="Mobile workspace navigation">
+      <a class="mobile-tab-bar__item" href="./">
+        <span class="mobile-tab-bar__icon" aria-hidden="true">M</span>
+        <span>Market</span>
+      </a>
+      <a class="mobile-tab-bar__item" href="./workbench.html">
+        <span class="mobile-tab-bar__icon" aria-hidden="true">W</span>
+        <span>Workbench</span>
+      </a>
+      <a class="mobile-tab-bar__item" href="./fred.html" aria-current="page">
+        <span class="mobile-tab-bar__icon" aria-hidden="true">F</span>
+        <span>Fred</span>
+      </a>
+    </nav>
 
     <script src="./fred.app.js?v=20260515-fred-workspace"></script>
   </body>
