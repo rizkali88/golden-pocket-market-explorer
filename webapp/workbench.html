@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Golden Pocket Market Explorer - Working Draft</title>
-    <link rel="stylesheet" href="./styles.css?v=20260515-opportunity-table-fit" />
+    <title>Golden Pocket Market Explorer</title>
+    <link rel="stylesheet" href="./styles.css?v=20260515-prod-root-sync" />
   </head>
   <body class="workbench-page">
     <div class="app-shell">
@@ -16,7 +16,7 @@
             </div>
             <div class="brand__text">
               <p class="eyebrow">Golden Pocket Lab</p>
-              <strong class="page-variant">Working Draft</strong>
+              <strong class="page-variant">Production</strong>
             </div>
           </div>
           <span class="status-pill" id="universe-status">Market universe loading</span>
@@ -180,16 +180,6 @@
                 </div>
               </article>
             </div>
-          </section>
-
-          <section class="panel reveal page-clone-notice" aria-label="Working draft notice">
-            <p class="eyebrow">Sandbox Page</p>
-            <h1>Working draft copy</h1>
-            <p>
-              This page is a full duplicate of the original report. We can redesign and rebuild the
-              methodology here while keeping the original dashboard available at
-              <a href="./index.html">index.html</a>.
-            </p>
           </section>
 
           <div class="market-workspace">
@@ -696,7 +686,7 @@
 
     <script>
       (() => {
-        const cacheVersion = "20260515-opportunity-table-fit";
+        const cacheVersion = "20260515-prod-root-sync";
         const liveStateVersion = String(Date.now());
         const dependencyScripts = [
           "./data/market_universe.js",
