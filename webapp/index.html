@@ -3,17 +3,722 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="refresh" content="0; url=./workbench.html?v=20260515-prod-root-sync" />
     <title>Golden Pocket Market Explorer</title>
-    <link rel="canonical" href="./workbench.html" />
-    <script>
-      window.location.replace("./workbench.html?v=20260515-prod-root-sync");
-    </script>
+    <link rel="stylesheet" href="./styles.css?v=20260515-prod-root-sync" />
   </head>
-  <body>
-    <p>
-      Opening Golden Pocket Market Explorer.
-      <a href="./workbench.html?v=20260515-prod-root-sync">Continue to the production dashboard</a>.
-    </p>
+  <body class="workbench-page">
+    <div class="app-shell">
+      <aside class="sidebar panel panel--glass" data-layout-id="1" data-layout-label="Toolbar">
+        <div class="sidebar__brand">
+          <div class="brand">
+            <div class="brand__mark" role="img" aria-label="Golden Pocket Lab icon">
+              GP
+            </div>
+            <div class="brand__text">
+              <p class="eyebrow">Golden Pocket Lab</p>
+              <strong class="page-variant">Production</strong>
+            </div>
+          </div>
+          <span class="status-pill" id="universe-status">Market universe loading</span>
+        </div>
+
+        <div class="sidebar__filters">
+          <div class="sidebar__filter-stack">
+            <label class="filter-field">
+              <span>Sector</span>
+              <select id="sector-filter" aria-label="Sector filter"></select>
+            </label>
+            <label class="filter-field">
+              <span>Industry</span>
+              <select id="industry-filter" aria-label="Industry filter"></select>
+            </label>
+            <div class="filter-field filter-field--ticker">
+              <span>Selected Ticker</span>
+              <div class="ticker-combobox" id="ticker-combobox">
+                <button class="ticker-combobox__button" id="ticker-filter-button" type="button" aria-haspopup="listbox" aria-expanded="false">
+                  <span id="ticker-filter-label">All companies</span>
+                </button>
+                <div class="ticker-combobox__menu" id="ticker-filter-menu" hidden>
+                  <input id="ticker-filter-search" type="search" placeholder="Search ticker or company" autocomplete="off" aria-label="Search ticker selector" />
+                  <div class="ticker-combobox__options" id="ticker-filter-options" role="listbox" aria-label="Ticker options"></div>
+                </div>
+              </div>
+              <select id="ticker-filter" aria-label="Ticker selector" hidden></select>
+            </div>
+            <label class="filter-field">
+              <span>Final Call</span>
+              <select id="final-call-filter" aria-label="Final call filter">
+                <option value="all">All Calls</option>
+                <option value="Buy" selected>Buy</option>
+                <option value="Watch">Watch</option>
+                <option value="Wait">Wait</option>
+                <option value="Avoid">Avoid</option>
+              </select>
+            </label>
+            <button id="clear-filters" class="filter-button" type="button">Clear filters</button>
+          </div>
+        </div>
+
+        <div class="sidebar__actions">
+          <button class="layout-toggle" id="layout-toggle" type="button" aria-pressed="false">Layout mode</button>
+          <button class="theme-toggle theme-toggle--compact" id="theme-toggle" type="button" aria-pressed="false" aria-label="Toggle color theme">
+            <span class="theme-toggle__icon theme-toggle__icon--light" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <circle cx="12" cy="12" r="4.2" />
+                <path d="M12 2.8v2.4M12 18.8v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.8 12h2.4M18.8 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7" />
+              </svg>
+            </span>
+            <span class="theme-toggle__thumb" aria-hidden="true"></span>
+            <span class="theme-toggle__icon theme-toggle__icon--dark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M19.2 14.6A7.2 7.2 0 0 1 9.4 4.8 8 8 0 1 0 19.2 14.6Z" />
+              </svg>
+            </span>
+          </button>
+        </div>
+      </aside>
+
+      <div class="report-shell">
+        <main class="dashboard">
+          <section class="panel reveal paper-bot-panel" id="paper-bot-panel" data-layout-id="5.7" data-layout-label="Paper Trading Bot">
+            <div class="paper-bot-panel__header">
+              <div>
+                <p class="eyebrow">Paper Trading Bot</p>
+                <h2>$10,000 dummy account run by Max Technical</h2>
+                <p class="paper-bot-panel__note">
+                  Paper simulation only. Max scans the market on a cloud schedule, opens/exits from technical analysis, and this page displays the latest saved state.
+                  <span id="paper-bot-live-status">Live marks loading independently.</span>
+                </p>
+              </div>
+              <div class="paper-bot-actions" aria-label="Paper bot controls">
+                <button type="button" class="paper-bot-button paper-bot-button--ghost" id="paper-bot-transactions-open">
+                  View transactions
+                  <span id="paper-bot-transactions-count">0</span>
+                </button>
+                <button type="button" class="paper-bot-button paper-bot-button--ghost" id="paper-bot-sync-connect" hidden>Sync key</button>
+                <button type="button" class="paper-bot-button" id="paper-bot-auto-toggle" aria-pressed="true" hidden>Max cloud: On</button>
+                <button type="button" class="paper-bot-button" id="paper-bot-evaluate" hidden>Manual evaluate</button>
+                <button type="button" class="paper-bot-button paper-bot-button--ghost" id="paper-bot-reset" hidden>Reset local $10k</button>
+              </div>
+            </div>
+
+            <div class="paper-bot-overview">
+              <article class="paper-bot-card paper-bot-card--portfolio">
+                <div class="paper-bot-portfolio__summary">
+                  <span>Account equity</span>
+                  <strong id="paper-bot-equity">$10,000.00</strong>
+                  <small id="paper-bot-return">0.00% total return</small>
+                  <small id="paper-bot-equity-change" data-tone="neutral">$0.00 | 0.00%</small>
+                  <div class="paper-bot-market-clock" id="paper-bot-market-clock" data-state="closed">
+                    <span class="paper-bot-market-clock__dot" aria-hidden="true"></span>
+                    <div>
+                      <strong id="paper-bot-market-status">Market status loading</strong>
+                      <small id="paper-bot-market-countdown">Checking NYSE regular session.</small>
+                    </div>
+                  </div>
+                  <div class="paper-bot-metrics" id="paper-bot-metrics"></div>
+                </div>
+                <div class="paper-bot-portfolio__chart">
+                  <div class="holdings-chart__header">
+                    <div>
+                      <span>Equity curve</span>
+                    </div>
+                    <div class="holdings-chart__ranges" id="paper-bot-holdings-ranges" aria-label="Holdings chart range"></div>
+                  </div>
+                  <div class="holdings-chart__canvas" id="paper-bot-holdings-chart-wrap">
+                    <div class="holdings-chart__axis holdings-chart__axis--y" aria-hidden="true">
+                      <span id="paper-bot-holdings-y-max">--</span>
+                      <span id="paper-bot-holdings-y-mid">--</span>
+                      <span id="paper-bot-holdings-y-min">--</span>
+                    </div>
+                    <svg id="paper-bot-holdings-chart" viewBox="0 0 1600 360" role="img" aria-label="Paper account equity chart" preserveAspectRatio="none">
+                      <defs>
+                        <linearGradient id="holdings-chart-fill-gradient" x1="0" x2="0" y1="0" y2="1">
+                          <stop offset="0%" stop-color="currentColor" stop-opacity="0.26" />
+                          <stop offset="100%" stop-color="currentColor" stop-opacity="0" />
+                        </linearGradient>
+                      </defs>
+                      <line class="holdings-chart__grid" x1="92" x2="1515" y1="70" y2="70"></line>
+                      <line class="holdings-chart__grid" x1="92" x2="1515" y1="178" y2="178"></line>
+                      <line class="holdings-chart__grid" x1="92" x2="1515" y1="286" y2="286"></line>
+                      <path class="holdings-chart__fill" id="paper-bot-holdings-fill"></path>
+                      <path class="holdings-chart__line" id="paper-bot-holdings-path"></path>
+                      <line class="holdings-chart__hover-line" id="paper-bot-holdings-hover-line" y1="48" y2="300" hidden></line>
+                      <circle class="holdings-chart__hover-dot" id="paper-bot-holdings-hover-dot" r="8" hidden></circle>
+                      <circle class="holdings-chart__last-dot" id="paper-bot-holdings-dot" r="5"></circle>
+                    </svg>
+                    <div class="holdings-chart__tooltip" id="paper-bot-holdings-tooltip" hidden></div>
+                    <p class="holdings-chart__empty" id="paper-bot-holdings-empty" hidden>No equity history to chart yet.</p>
+                    <div class="holdings-chart__axis holdings-chart__axis--x" aria-hidden="true">
+                      <span id="paper-bot-holdings-x-start">--</span>
+                      <span id="paper-bot-holdings-x-end">--</span>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            </div>
+
+            <div class="paper-bot-data-grid">
+              <article class="paper-bot-table-card">
+                <div class="paper-bot-table-card__header">
+                  <span>Open paper positions</span>
+                  <small id="paper-bot-position-count">0 open</small>
+                </div>
+                <div class="paper-bot-table-wrap paper-bot-table-wrap--positions">
+                  <table class="paper-bot-table">
+                    <thead>
+                      <tr>
+                        <th>Ticker</th>
+                        <th>Shares</th>
+                        <th>Entry</th>
+                        <th>Mark</th>
+                        <th>Open P&amp;L</th>
+                      </tr>
+                    </thead>
+                    <tbody id="paper-bot-positions"></tbody>
+                  </table>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <div class="market-workspace">
+            <section class="panel reveal opportunity-panel" data-layout-id="7" data-layout-label="Opportunity Table">
+              <div class="opportunity-panel__header">
+                <div>
+                  <p class="eyebrow">Opportunity Table</p>
+                  <h2 id="roster-title">Buy candidates</h2>
+                  <p id="roster-note">Showing companies with a Buy final call by default.</p>
+                </div>
+                <strong class="opportunity-panel__count" id="company-count">Loading companies</strong>
+              </div>
+              <div class="opportunity-table-wrap">
+                <table class="opportunity-table">
+                  <thead>
+                    <tr>
+                      <th>Company / Classification</th>
+                      <th>
+                        <button class="table-sort-button" id="final-call-sort" type="button" aria-label="Sort final call">
+                          Final Call
+                        </button>
+                      </th>
+                      <th>Max Bot Status</th>
+                      <th>Conviction</th>
+                    </tr>
+                  </thead>
+                  <tbody id="opportunity-table-body"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel reveal max-execution-panel" data-layout-id="8.5" data-layout-label="Max Execution Chart">
+              <div class="max-execution-panel__header">
+                <div>
+                  <p class="eyebrow">Max Execution Chart</p>
+                  <h2 id="max-execution-title">Select a ticker to map entry, stop, and targets</h2>
+                  <p id="max-execution-summary">
+                    Max will translate the Technical dashboard into an execution map once price and 52-week range inputs are available.
+                  </p>
+                </div>
+                <div class="max-execution-panel__tools">
+                  <span class="decision-badge" id="max-execution-verdict">Awaiting ticker</span>
+                  <div class="max-live-strip">
+                    <span class="max-live-status" id="max-live-status">Live off</span>
+                    <button class="max-live-action" id="max-live-toggle" type="button">Live feed</button>
+                    <button class="max-live-action" id="max-live-connect" type="button">FMP key</button>
+                  </div>
+                  <div class="max-execution-control-group">
+                    <span>Chart</span>
+                    <div class="max-execution-range-switcher" id="max-execution-chart-type-switcher" aria-label="Max chart type"></div>
+                  </div>
+                  <div class="max-execution-control-group">
+                    <span>Range</span>
+                    <div class="max-execution-range-switcher" id="max-execution-range-switcher" aria-label="Max chart range"></div>
+                  </div>
+                  <div class="max-execution-control-group">
+                    <span>Interval</span>
+                    <div class="max-execution-range-switcher" id="max-execution-interval-switcher" aria-label="Max chart interval"></div>
+                  </div>
+                  <div class="max-execution-control-group max-execution-control-group--wide">
+                    <span>Drawings</span>
+                    <div class="max-execution-range-switcher" id="max-execution-drawing-switcher" aria-label="Max technical drawing overlays"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="max-execution-layout">
+                <div class="max-execution-chart-shell" id="max-execution-chart-host" aria-live="polite"></div>
+                <aside class="max-execution-sidecar">
+                  <div class="max-execution-callout">
+                    <span>Setup Quality</span>
+                    <strong id="max-execution-score">--/100</strong>
+                    <small id="max-execution-position">Waiting for technical model</small>
+                  </div>
+                  <div class="max-execution-levels" id="max-execution-levels"></div>
+                </aside>
+              </div>
+              <p class="chart-panel__note">
+                Max overlays are generated from price, 52-week structure, Fibonacci retracements, Elliott-style impulse mapping, and ICT liquidity proxies. Daily, weekly, and monthly modes use cached 10-year history; 1m, 15m, and 4h intervals pull FMP data on demand for the selected ticker when live feed is connected. Live feed only updates the current bar.
+              </p>
+            </section>
+          </div>
+
+          <section class="panel reveal agent-dashboard-panel" id="agent-dashboard-panel" data-layout-id="5.5" data-layout-label="Fundamental and Technical Dashboards">
+            <div class="section-heading">
+              <p class="eyebrow">Decision Dashboards</p>
+              <h2>The Fundamental and Technical dashboards behind each Trading Decision</h2>
+            </div>
+
+            <div class="agent-dashboard-grid">
+              <article class="agent-dashboard-card agent-dashboard-card--john">
+                <div class="agent-dashboard-card__header">
+                  <div>
+                    <p class="eyebrow">Fundamental Dashboard</p>
+                    <h3>Fundamental Investment Memo</h3>
+                  </div>
+                  <span class="decision-badge" id="john-verdict">Awaiting ticker</span>
+                </div>
+                <div class="agent-input-pack">
+                  <div class="agent-pack-title">
+                    <span>What Fundamental is reading</span>
+                    <small id="john-data-source">Ticker-level fundamentals and valuation context</small>
+                  </div>
+                  <div class="agent-input-grid" id="john-input-grid"></div>
+                  <div class="agent-target-strip" id="john-target-strip"></div>
+                </div>
+                <div class="agent-score-bars" id="john-score-bars"></div>
+                <div class="agent-table-wrap">
+                  <table class="agent-metric-table">
+                    <thead>
+                      <tr>
+                        <th>Institutional KPI</th>
+                        <th>Reading</th>
+                        <th>Interpretation</th>
+                      </tr>
+                    </thead>
+                    <tbody id="john-metrics-table"></tbody>
+                  </table>
+                </div>
+              </article>
+
+              <article class="agent-dashboard-card agent-dashboard-card--max">
+                <div class="agent-dashboard-card__header">
+                  <div>
+                    <p class="eyebrow">Technical Dashboard</p>
+                    <h3>Technical Execution Board</h3>
+                  </div>
+                  <span class="decision-badge" id="max-verdict">Awaiting ticker</span>
+                </div>
+                <div class="agent-input-pack">
+                  <div class="agent-pack-title">
+                    <span>What Technical is reading</span>
+                    <small id="max-data-source">Price structure, trend, liquidity, and execution levels</small>
+                  </div>
+                  <div class="agent-input-grid" id="max-input-grid"></div>
+                  <div class="return-bars" id="max-return-bars"></div>
+                </div>
+                <div class="agent-score-bars" id="max-score-bars"></div>
+                <div class="price-ladder" id="max-price-ladder"></div>
+                <div class="agent-table-wrap">
+                  <table class="agent-metric-table">
+                    <thead>
+                      <tr>
+                        <th>Execution Level</th>
+                        <th>Price</th>
+                        <th>Purpose</th>
+                      </tr>
+                    </thead>
+                    <tbody id="max-levels-table"></tbody>
+                  </table>
+                </div>
+              </article>
+            </div>
+
+            <article class="trading-decision-card" id="trading-decision-card">
+              <div>
+                <p class="eyebrow">Combined Output</p>
+                <h3>Trading Decision</h3>
+                <p id="trading-decision-summary">Select a ticker to combine Fundamental and Technical into one actionable view.</p>
+              </div>
+              <div class="trading-decision-grid" id="trading-decision-grid"></div>
+            </article>
+          </section>
+
+          <section class="panel reveal chart-panel chart-panel--wide" data-layout-id="8" data-layout-label="TradingView Chart">
+            <div class="section-heading section-heading--tight">
+              <p class="eyebrow">TradingView Chart</p>
+              <h2 id="tradingview-chart-title">Full-width market chart</h2>
+              <p class="chart-panel__subtitle" id="tradingview-chart-subtitle">
+                Select a ticker from the table or toolbar to load the interactive TradingView chart.
+              </p>
+            </div>
+            <div class="tradingview-chart-shell" id="tradingview-chart-host" aria-live="polite"></div>
+          </section>
+
+        <section class="panel panel--sources reveal" data-layout-id="13" data-layout-label="Sources">
+          <div class="section-heading">
+            <p class="eyebrow">Sources</p>
+            <h2>Linked research inputs</h2>
+          </div>
+          <ul class="source-list">
+            <li><a href="https://www.sec.gov/files/company_tickers_exchange.json" target="_blank" rel="noreferrer">SEC company_tickers_exchange.json</a></li>
+            <li><a href="https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data" target="_blank" rel="noreferrer">SEC EDGAR Data Access Guidance</a></li>
+            <li><a href="https://www.sec.gov/search-filings/edgar-application-programming-interfaces" target="_blank" rel="noreferrer">SEC EDGAR API Documentation</a></li>
+            <li><a href="https://www.tradingview.com/widget-docs/widgets/charts/advanced-chart/" target="_blank" rel="noreferrer">TradingView Advanced Chart Widget</a></li>
+            <li><a href="https://www.reit.com/what-reit/reit-sectors/health-care" target="_blank" rel="noreferrer">Nareit Health Care REIT Sector Directory</a></li>
+            <li><a href="https://fred.stlouisfed.org/series/DGS10" target="_blank" rel="noreferrer">FRED 10-Year Treasury Yield</a></li>
+            <li><a href="https://www.ssga.com/us/en/intermediary/etfs/state-street-real-estate-select-sector-spdr-etf-xlre" target="_blank" rel="noreferrer">State Street XLRE Fund Page</a></li>
+            <li><a href="https://welltower.com/wp-content/uploads/2026/04/Business-Update-1Q26_vFFF.pdf" target="_blank" rel="noreferrer">Welltower Q1 2026 Business Update</a></li>
+            <li><a href="https://ir.ventasreit.com/news/news-details/2026/Ventas-Reports-2026-First-Quarter-Results/default.aspx" target="_blank" rel="noreferrer">Ventas Q1 2026 Results</a></li>
+            <li><a href="https://ir.healthpeak.com/news/news-details/2026/Healthpeak-Properties-Raises-2026-Earnings-Guidance-Following-Completion-of-the-Janus-Living-IPO-Accretive-Capital-Allocation-and-Strong-First-Quarter-2026-Results/default.aspx" target="_blank" rel="noreferrer">Healthpeak Q1 2026 Results</a></li>
+          </ul>
+        </section>
+        </main>
+      </div>
+    </div>
+
+    <aside class="layout-legend" id="layout-legend" hidden aria-live="polite"></aside>
+
+    <div class="paper-bot-modal paper-bot-confirm-modal" id="paper-bot-close-confirm-modal" hidden aria-hidden="true">
+      <div class="paper-bot-modal__backdrop" data-paper-bot-close-confirm-cancel></div>
+      <section class="paper-bot-modal__dialog paper-bot-confirm-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="paper-bot-close-confirm-title">
+        <div class="paper-bot-modal__header">
+          <div>
+            <p class="eyebrow">Manual Override</p>
+            <h2 id="paper-bot-close-confirm-title">Close paper trade?</h2>
+            <p id="paper-bot-close-confirm-message">Are you sure you want to close this open paper trade?</p>
+          </div>
+        </div>
+        <div class="paper-bot-confirm-modal__actions">
+          <button type="button" class="paper-bot-button paper-bot-button--danger" id="paper-bot-close-confirm-ok">OK</button>
+          <button type="button" class="paper-bot-button paper-bot-button--ghost" id="paper-bot-close-confirm-cancel">Cancel</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="paper-bot-modal" id="paper-bot-transactions-modal" hidden aria-hidden="true">
+      <div class="paper-bot-modal__backdrop" data-paper-bot-modal-close></div>
+      <section class="paper-bot-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="paper-bot-transactions-title">
+        <div class="paper-bot-modal__header">
+          <div>
+            <p class="eyebrow">Max Paper Bot</p>
+            <h2 id="paper-bot-transactions-title">Transaction history</h2>
+            <p id="paper-bot-transactions-summary">Every recorded paper trade will appear here.</p>
+          </div>
+          <button type="button" class="paper-bot-modal__close" id="paper-bot-transactions-close" aria-label="Close transactions">Close</button>
+        </div>
+        <div class="paper-bot-modal__table-wrap">
+          <table class="paper-bot-table paper-bot-table--transactions">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Action</th>
+                <th>Ticker</th>
+                <th>Shares</th>
+                <th>Buy Price</th>
+                <th>Trade Price</th>
+                <th>Value</th>
+                <th>Realized P/L</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody id="paper-bot-transactions-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      (() => {
+        const storageKey = "golden-pocket-paper-bot-v1";
+        const startingCash = 10000;
+        const moneyFormatter = new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+        const numberFormatter = new Intl.NumberFormat("en-US", {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 4,
+        });
+
+        const getNumber = (value, fallback = 0) => {
+          const parsed = Number(value);
+          return Number.isFinite(parsed) ? parsed : fallback;
+        };
+        const formatMoney = (value) => moneyFormatter.format(getNumber(value));
+        const formatSignedMoney = (value) => {
+          const parsed = getNumber(value);
+          return `${parsed >= 0 ? "" : "-"}${formatMoney(Math.abs(parsed))}`;
+        };
+        const formatPercent = (value) => {
+          const parsed = getNumber(value);
+          return `${parsed >= 0 ? "+" : ""}${parsed.toFixed(2)}%`;
+        };
+        const formatNumber = (value) => numberFormatter.format(getNumber(value));
+        const escapeHtml = (value) =>
+          String(value ?? "")
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#39;");
+        const readPaperBotState = () => {
+          try {
+            const stored = window.localStorage.getItem(storageKey);
+            const parsed = stored ? JSON.parse(stored) : null;
+            return parsed?.mode === "max_autonomous_cloud" ? parsed : null;
+          } catch {
+            return null;
+          }
+        };
+        const getMarkPrice = (position) => {
+          const candidates = [
+            position?.lastPrice,
+            position?.markPrice,
+            position?.price,
+            position?.entryPrice,
+          ];
+          for (const candidate of candidates) {
+            const price = Number(candidate);
+            if (Number.isFinite(price) && price > 0) {
+              return price;
+            }
+          }
+          return 0;
+        };
+        const formatTime = (value) => {
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) {
+            return "Saved";
+          }
+          return date.toLocaleString([], {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          });
+        };
+        const makeMetric = (label, value, tone = "") => {
+          const metric = document.createElement("div");
+          metric.className = "paper-bot-metric";
+          if (tone) {
+            metric.dataset.tone = tone;
+          }
+          metric.innerHTML = `<span>${label}</span><strong>${value}</strong>`;
+          return metric;
+        };
+        const makeEmptyRow = (message, colspan) => {
+          const row = document.createElement("tr");
+          row.className = "paper-bot-empty";
+          row.innerHTML = `<td colspan="${colspan}">${message}</td>`;
+          return row;
+        };
+
+        const state = readPaperBotState();
+        if (!state || typeof state !== "object") {
+          return;
+        }
+
+        const positions = Object.values(state.positions ?? {}).map((position) => {
+          const shares = getNumber(position?.shares);
+          const entryPrice = getNumber(position?.entryPrice, getMarkPrice(position));
+          const markPrice = getMarkPrice(position);
+          const marketValue = shares * markPrice;
+          const costBasis = shares * entryPrice;
+          const unrealizedPnl = marketValue - costBasis;
+          return {
+            ...position,
+            ticker: String(position?.ticker ?? ""),
+            name: String(position?.name ?? ""),
+            shares,
+            entryPrice,
+            markPrice,
+            marketValue,
+            unrealizedPnl,
+            unrealizedPct: costBasis > 0 ? (unrealizedPnl / costBasis) * 100 : 0,
+          };
+        });
+        const cash = getNumber(state.cash, startingCash);
+        const openValue = positions.reduce((sum, position) => sum + position.marketValue, 0);
+        const unrealizedPnl = positions.reduce((sum, position) => sum + position.unrealizedPnl, 0);
+        const realizedPnl = getNumber(state.realizedPnl);
+        const equity = cash + openValue;
+        const returnPct = ((equity - startingCash) / startingCash) * 100;
+
+        const setText = (selector, value) => {
+          const element = document.querySelector(selector);
+          if (element) {
+            element.textContent = value;
+          }
+          return element;
+        };
+
+        setText("#paper-bot-equity", formatMoney(equity));
+        setText("#paper-bot-return", `${formatPercent(returnPct)} total return`);
+        const equityChange = setText("#paper-bot-equity-change", `${formatSignedMoney(equity - startingCash)} | ${formatPercent(returnPct)}`);
+        if (equityChange) {
+          equityChange.dataset.tone = equity > startingCash ? "positive" : equity < startingCash ? "negative" : "neutral";
+        }
+        const marketStatus = setText("#paper-bot-market-status", "Market clock loading");
+        setText("#paper-bot-market-countdown", "Full session timer loads with the app.");
+        marketStatus?.closest?.("#paper-bot-market-clock")?.setAttribute("data-state", "preopen");
+        const holdingsChart = document.querySelector("#paper-bot-holdings-chart");
+        const holdingsPath = document.querySelector("#paper-bot-holdings-path");
+        const holdingsFill = document.querySelector("#paper-bot-holdings-fill");
+        const holdingsDot = document.querySelector("#paper-bot-holdings-dot");
+        const holdingsEmpty = document.querySelector("#paper-bot-holdings-empty");
+        const yMax = document.querySelector("#paper-bot-holdings-y-max");
+        const yMid = document.querySelector("#paper-bot-holdings-y-mid");
+        const yMin = document.querySelector("#paper-bot-holdings-y-min");
+        const xStart = document.querySelector("#paper-bot-holdings-x-start");
+        const xEnd = document.querySelector("#paper-bot-holdings-x-end");
+        if (holdingsChart && holdingsPath && holdingsFill && holdingsDot && holdingsEmpty) {
+          const startValue = startingCash;
+          const endValue = equity;
+          if (positions.length || (Array.isArray(state.trades) && state.trades.length)) {
+            const values = [startValue, startValue * 0.998 + endValue * 0.002, startValue * 0.35 + endValue * 0.65, endValue];
+            const min = Math.min(...values);
+            const max = Math.max(...values);
+            const range = Math.max(max - min, Math.max(endValue, 1) * 0.02);
+            const points = values.map((value, index) => {
+              const x = 92 + (index / Math.max(values.length - 1, 1)) * 1423;
+              const y = 300 - ((value - min) / range) * 252;
+              return [x, y];
+            });
+            const d = points.reduce((path, point, index) => `${path}${index ? " L" : "M"}${point[0].toFixed(2)} ${point[1].toFixed(2)}`, "");
+            holdingsPath.setAttribute("d", d);
+            holdingsFill.setAttribute("d", `${d} L1515 300 L92 300 Z`);
+            holdingsDot.setAttribute("cx", points.at(-1)[0].toFixed(2));
+            holdingsDot.setAttribute("cy", points.at(-1)[1].toFixed(2));
+            holdingsChart.parentElement.dataset.tone = returnPct >= 0 ? "positive" : "negative";
+            if (yMax) yMax.textContent = formatMoney(max);
+            if (yMid) yMid.textContent = formatMoney(min + (max - min) / 2);
+            if (yMin) yMin.textContent = formatMoney(min);
+            if (xStart) xStart.textContent = "Start";
+            if (xEnd) xEnd.textContent = "Now";
+            holdingsEmpty.hidden = true;
+          } else {
+            holdingsPath.removeAttribute("d");
+            holdingsFill.removeAttribute("d");
+            holdingsDot.removeAttribute("cx");
+            holdingsDot.removeAttribute("cy");
+            [yMax, yMid, yMin, xStart, xEnd].forEach((element) => {
+              if (element) element.textContent = "--";
+            });
+            holdingsEmpty.hidden = false;
+          }
+        }
+        const metrics = document.querySelector("#paper-bot-metrics");
+        metrics?.replaceChildren(
+          makeMetric("Cash", formatMoney(cash)),
+          makeMetric("Open value", formatMoney(openValue)),
+          makeMetric(
+            "Open P/L",
+            formatSignedMoney(unrealizedPnl),
+            unrealizedPnl > 0 ? "positive" : unrealizedPnl < 0 ? "negative" : "",
+          ),
+          makeMetric(
+            "Realized P/L",
+            formatSignedMoney(realizedPnl),
+            realizedPnl > 0 ? "positive" : realizedPnl < 0 ? "negative" : "",
+          ),
+        );
+
+        const instruction = setText(
+          "#paper-bot-instruction",
+          positions.length ? "Hold position" : "Awaiting ticker",
+        );
+        if (instruction) {
+          instruction.className = `paper-bot-instruction paper-bot-instruction--${
+            positions.length ? "buy" : "wait"
+          }`;
+        }
+        setText(
+          "#paper-bot-reason",
+          positions.length
+            ? "Saved paper account loaded instantly. Live marks refresh after market data finishes."
+            : "Select a ticker to let the paper bot read the combined decision.",
+        );
+        const autoToggle = document.querySelector("#paper-bot-auto-toggle");
+        if (autoToggle) {
+          const isAutoEnabled = state.autoEnabled !== false;
+          autoToggle.textContent = isAutoEnabled ? "Auto paper: On" : "Auto paper: Off";
+          autoToggle.setAttribute("aria-pressed", String(isAutoEnabled));
+          autoToggle.classList.toggle("is-active", isAutoEnabled);
+        }
+
+        setText("#paper-bot-position-count", `${positions.length} open`);
+        const positionsBody = document.querySelector("#paper-bot-positions");
+        if (positionsBody) {
+          positionsBody.replaceChildren(
+            ...(positions.length
+                ? positions.map((position) => {
+                    const row = document.createElement("tr");
+                    row.innerHTML = `
+                    <td>
+                      <div class="paper-bot-position-main">
+                        <button class="paper-bot-ticker-button" type="button">
+                          <strong>${escapeHtml(position.ticker)}</strong>
+                          <small>${escapeHtml(position.name)}</small>
+                        </button>
+                        <button class="paper-bot-close-trade" type="button">Close trade</button>
+                      </div>
+                    </td>
+                    <td>${formatNumber(position.shares)}</td>
+                    <td>${formatMoney(position.entryPrice)}</td>
+                    <td>${formatMoney(position.markPrice)}<small>saved mark</small></td>
+                    <td class="paper-bot-table__open-pnl" data-tone="${position.unrealizedPnl >= 0 ? "positive" : "negative"}">
+                      <strong>${formatMoney(position.marketValue)}</strong>
+                      <small>${formatSignedMoney(position.unrealizedPnl)} | ${formatPercent(position.unrealizedPct)}</small>
+                    </td>
+                  `;
+                    return row;
+                  })
+              : [makeEmptyRow("No open paper positions yet.", 5)]),
+          );
+        }
+
+        const trades = Array.isArray(state.trades) ? state.trades : [];
+        setText("#paper-bot-transactions-count", String(trades.length));
+      })();
+    </script>
+
+    <script>
+      (() => {
+        const cacheVersion = "20260515-prod-root-sync";
+        const liveStateVersion = String(Date.now());
+        const dependencyScripts = [
+          "./data/market_universe.js",
+          "./data/research_profiles.js",
+          "./data/history/index.js",
+          "./data/live_config.js",
+          "./data/max_bot_state.js",
+          "https://unpkg.com/lightweight-charts@4.2.2/dist/lightweight-charts.standalone.production.js",
+        ];
+        const versionedSource = (source) =>
+          source.endsWith("/max_bot_state.js")
+            ? `${source}?v=${liveStateVersion}`
+            : source.startsWith("./")
+              ? `${source}?v=${cacheVersion}`
+              : source;
+        const loadScript = (source) =>
+          new Promise((resolve, reject) => {
+            const script = document.createElement("script");
+            script.src = versionedSource(source);
+            script.async = true;
+            script.onload = resolve;
+            script.onerror = () => reject(new Error(`Failed to load ${source}`));
+            document.body.append(script);
+          });
+
+        Promise.all(dependencyScripts.map(loadScript))
+          .then(() => loadScript("./app.js"))
+          .catch((error) => {
+            document.body.dataset.bootError = error.message;
+            console.error(error);
+          });
+      })();
+    </script>
   </body>
 </html>

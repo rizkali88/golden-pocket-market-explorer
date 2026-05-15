@@ -3,8 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Golden Pocket Market Explorer</title>
-    <link rel="stylesheet" href="./styles.css?v=20260515-prod-root-sync" />
+    <title>Golden Pocket Market Explorer - Non Production</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="stylesheet" href="./workbench.styles.css?v=20260515-nonprod-table-fit" />
   </head>
   <body class="workbench-page">
     <div class="app-shell">
@@ -16,7 +17,7 @@
             </div>
             <div class="brand__text">
               <p class="eyebrow">Golden Pocket Lab</p>
-              <strong class="page-variant">Production</strong>
+              <strong class="page-variant page-variant--nonprod">Non Production</strong>
             </div>
           </div>
           <span class="status-pill" id="universe-status">Market universe loading</span>
@@ -196,13 +197,13 @@
                 <table class="opportunity-table">
                   <thead>
                     <tr>
-                      <th>Company / Classification</th>
+                      <th>Company</th>
                       <th>
                         <button class="table-sort-button" id="final-call-sort" type="button" aria-label="Sort final call">
-                          Final Call
+                          Call
                         </button>
                       </th>
-                      <th>Max Bot Status</th>
+                      <th>Max</th>
                       <th>Conviction</th>
                     </tr>
                   </thead>
@@ -686,7 +687,7 @@
 
     <script>
       (() => {
-        const cacheVersion = "20260515-prod-root-sync";
+        const cacheVersion = "20260515-nonprod-table-fit";
         const liveStateVersion = String(Date.now());
         const dependencyScripts = [
           "./data/market_universe.js",
@@ -713,7 +714,7 @@
           });
 
         Promise.all(dependencyScripts.map(loadScript))
-          .then(() => loadScript("./app.js"))
+          .then(() => loadScript("./workbench.app.js"))
           .catch((error) => {
             document.body.dataset.bootError = error.message;
             console.error(error);
