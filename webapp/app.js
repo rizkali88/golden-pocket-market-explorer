@@ -6532,6 +6532,9 @@ function getPaperBotCloseBlockMessage(ticker = "") {
   if (paperBotState.mode === "max_autonomous_cloud" && !hasPaperBotCloudSync()) {
     reasons.push("Paper-bot cloud sync is not configured yet.");
   }
+  if (paperBotState.mode === "max_autonomous_cloud" && hasPaperBotCloudSync() && !getPaperBotSyncToken()) {
+    reasons.push("Enter the paper-bot Sync key on this device.");
+  }
   return reasons.length ? `Cannot close ${normalizedTicker} yet. ${reasons.join(" ")}` : "";
 }
 
