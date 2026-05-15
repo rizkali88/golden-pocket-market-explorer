@@ -1774,6 +1774,12 @@ body::before {
   margin-top: 0 !important;
 }
 
+.paper-bot-position-main {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+
 .paper-bot-table__open-pnl strong {
   display: block;
   color: var(--ink);

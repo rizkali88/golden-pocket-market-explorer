@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golden Pocket Market Explorer - Working Draft</title>
-    <link rel="stylesheet" href="./styles.css?v=20260515-portfolio-sync" />
+    <link rel="stylesheet" href="./styles.css?v=20260515-close-trade-return" />
   </head>
   <body class="workbench-page">
     <div class="app-shell">
@@ -166,7 +166,6 @@
                         <th>Entry</th>
                         <th>Mark</th>
                         <th>Open P&amp;L</th>
-                        <th>Action</th>
                       </tr>
                     </thead>
                     <tbody id="paper-bot-positions"></tbody>
@@ -655,10 +654,18 @@
         if (positionsBody) {
           positionsBody.replaceChildren(
             ...(positions.length
-              ? positions.map((position) => {
-                  const row = document.createElement("tr");
-                  row.innerHTML = `
-                    <td><strong>${escapeHtml(position.ticker)}</strong><small>${escapeHtml(position.name)}</small></td>
+                ? positions.map((position) => {
+                    const row = document.createElement("tr");
+                    row.innerHTML = `
+                    <td>
+                      <div class="paper-bot-position-main">
+                        <button class="paper-bot-ticker-button" type="button">
+                          <strong>${escapeHtml(position.ticker)}</strong>
+                          <small>${escapeHtml(position.name)}</small>
+                        </button>
+                        <button class="paper-bot-close-trade" type="button">Close trade</button>
+                      </div>
+                    </td>
                     <td>${formatNumber(position.shares)}</td>
                     <td>${formatMoney(position.entryPrice)}</td>
                     <td>${formatMoney(position.markPrice)}<small>saved mark</small></td>
@@ -666,11 +673,10 @@
                       <strong>${formatMoney(position.marketValue)}</strong>
                       <small>${formatSignedMoney(position.unrealizedPnl)} | ${formatPercent(position.unrealizedPct)}</small>
                     </td>
-                    <td><span class="paper-bot-cloud-sync">Cloud synced</span></td>
                   `;
-                  return row;
-                })
-              : [makeEmptyRow("No open paper positions yet.", 6)]),
+                    return row;
+                  })
+              : [makeEmptyRow("No open paper positions yet.", 5)]),
           );
         }
 
@@ -681,7 +687,7 @@
 
     <script>
       (() => {
-        const cacheVersion = "20260515-portfolio-sync";
+        const cacheVersion = "20260515-close-trade-return";
         const liveStateVersion = String(Date.now());
         const dependencyScripts = [
           "./data/market_universe.js",

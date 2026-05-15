@@ -1130,6 +1130,8 @@ const maxExecutionLiveConfig = {
   proxyBaseUrl: "",
   pollSeconds: 20,
   allowBrowserApiKey: true,
+  paperBotSyncBaseUrl: "",
+  paperBotSyncToken: "",
   ...(window.GOLDEN_POCKET_LIVE_CONFIG ?? {}),
 };
 const FMP_DIRECT_BASE_URL = "https://financialmodelingprep.com/stable";
@@ -2278,11 +2280,17 @@ function buildFmpRequestUrl(kind, params = {}) {
 }
 
 async function fetchJson(url, timeoutMs = 15000) {
+  return fetchJsonRequest(url, { headers: { Accept: "application/json" } }, timeoutMs);
+}
+
+async function fetchJsonRequest(url, options = {}, timeoutMs = 15000) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, {
-      headers: { Accept: "application/json" },
+      method: options.method ?? "GET",
+      headers: options.headers ?? { Accept: "application/json" },
+      body: options.body,
       signal: controller.signal,
     });
     if (!response.ok) {
@@ -5616,6 +5624,18 @@ function rememberPaperBotManualClose(trade) {
   savePaperBotOverrides(overrides);
 }
 
+function dropPaperBotManualClosesById(tradeIds) {
+  if (!tradeIds?.size) {
+    return;
+  }
+  const overrides = loadPaperBotOverrides();
+  const nextManualCloses = overrides.manualCloses.filter((item) => !tradeIds.has(String(item?.id ?? "")));
+  if (nextManualCloses.length === overrides.manualCloses.length) {
+    return;
+  }
+  savePaperBotOverrides({ ...overrides, manualCloses: nextManualCloses });
+}
+
 function clonePaperBotState(state) {
   return JSON.parse(JSON.stringify(state));
 }
@@ -5690,11 +5710,45 @@ function normalizePaperBotState(rawState) {
   };
 }
 
+function getPaperBotSyncBaseUrl() {
+  return String(maxExecutionLiveConfig.paperBotSyncBaseUrl || "").replace(/\/+$/, "");
+}
+
+function hasPaperBotCloudSync() {
+  return Boolean(getPaperBotSyncBaseUrl());
+}
+
+function getPaperBotSyncHeaders(extraHeaders = {}) {
+  const headers = {
+    Accept: "application/json",
+    ...extraHeaders,
+  };
+  const token = String(maxExecutionLiveConfig.paperBotSyncToken || "").trim();
+  if (token) {
+    headers["x-paper-bot-token"] = token;
+  }
+  return headers;
+}
+
+function buildPaperBotSyncUrl(pathname) {
+  const baseUrl = getPaperBotSyncBaseUrl();
+  if (!baseUrl) {
+    return "";
+  }
+  const normalizedPath = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  return `${baseUrl}${normalizedPath}`;
+}
+
+function pruneSyncedPaperBotManualCloses(state) {
+  const tradeIds = new Set((state?.trades ?? []).map((trade) => String(trade?.id ?? "")));
+  dropPaperBotManualClosesById(tradeIds);
+}
+
 function loadPaperBotState() {
   const cloudState = normalizePaperBotState(window.GOLDEN_POCKET_MAX_BOT);
   if (cloudState?.mode === "max_autonomous_cloud") {
-    window.localStorage.removeItem(PAPER_BOT_OVERRIDE_STORAGE_KEY);
-    return cloudState;
+    pruneSyncedPaperBotManualCloses(cloudState);
+    return applyPaperBotManualOverrides(cloudState);
   }
   try {
     const parsed = JSON.parse(window.localStorage.getItem(PAPER_BOT_STORAGE_KEY) ?? "null");
@@ -5725,27 +5779,39 @@ function loadPaperBotCloudStateScript() {
   });
 }
 
+async function loadPaperBotCloudState() {
+  if (hasPaperBotCloudSync()) {
+    return normalizePaperBotState(
+      await fetchJsonRequest(buildPaperBotSyncUrl("/paper-bot/state"), {
+        headers: getPaperBotSyncHeaders(),
+      }),
+    );
+  }
+  return loadPaperBotCloudStateScript();
+}
+
 async function refreshPaperBotCloudState(options = {}) {
-  if (paperBotState.mode !== "max_autonomous_cloud" || paperBotCloudStateRefreshInFlight) {
+  if (paperBotState.mode !== "max_autonomous_cloud" || (paperBotCloudStateRefreshInFlight && options.force !== true)) {
     return;
   }
   paperBotCloudStateRefreshInFlight = true;
   try {
-    const nextState = await loadPaperBotCloudStateScript();
+    const previousGeneratedAt = paperBotState.generatedAt;
+    const nextState = await loadPaperBotCloudState();
     if (!nextState || nextState.mode !== "max_autonomous_cloud") {
       return;
     }
-    if (nextState.generatedAt && nextState.generatedAt !== paperBotState.generatedAt) {
-      window.localStorage.removeItem(PAPER_BOT_OVERRIDE_STORAGE_KEY);
-      paperBotState = nextState;
-      paperBotMarkPriceCache.clear();
+    pruneSyncedPaperBotManualCloses(nextState);
+    paperBotState = applyPaperBotManualOverrides(nextState);
+    paperBotMarkPriceCache.clear();
+    if (
+      options.immediate ||
+      options.force === true ||
+      (nextState.generatedAt && nextState.generatedAt !== previousGeneratedAt)
+    ) {
       renderPaperBotPanelForCurrentSelection();
-      schedulePaperBotLiveRefresh({ immediate: true });
-      return;
     }
-    if (options.immediate) {
-      renderPaperBotPanelForCurrentSelection();
-    }
+    schedulePaperBotLiveRefresh({ immediate: true });
   } catch (error) {
     if (options.immediate) {
       setPaperBotLiveStatus("Max cloud ledger is cached locally; live marks still run if FMP is connected.", "warning");
@@ -6519,16 +6585,15 @@ function renderPaperBotPanel(company = null, johnView = null, maxView = null, de
         ? snapshot.positions.map((position) => {
             const row = document.createElement("tr");
             const pnlTone = position.unrealizedPnl >= 0 ? "positive" : "negative";
-            const actionMarkup =
-              paperBotState.mode === "max_autonomous_cloud"
-                ? `<span class="paper-bot-cloud-sync">Cloud synced</span>`
-                : `<button class="paper-bot-close-trade" type="button" data-paper-bot-close-trade="${escapeHtml(position.ticker)}">Close trade</button>`;
             row.innerHTML = `
               <td>
-                <button class="paper-bot-ticker-button" type="button" data-paper-bot-select-ticker="${escapeHtml(position.ticker)}">
-                  <strong>${position.ticker}</strong>
-                  <small>${position.name ?? ""}</small>
-                </button>
+                <div class="paper-bot-position-main">
+                  <button class="paper-bot-ticker-button" type="button" data-paper-bot-select-ticker="${escapeHtml(position.ticker)}">
+                    <strong>${position.ticker}</strong>
+                    <small>${position.name ?? ""}</small>
+                  </button>
+                  <button class="paper-bot-close-trade" type="button" data-paper-bot-close-trade="${escapeHtml(position.ticker)}">Close trade</button>
+                </div>
               </td>
               <td>${formatNumber(position.shares, 4)}</td>
               <td>${formatMoney(position.entryPrice)}</td>
@@ -6537,11 +6602,10 @@ function renderPaperBotPanel(company = null, johnView = null, maxView = null, de
                 <strong>${formatMoney(position.marketValue)}</strong>
                 <small>${formatSignedMoney(position.unrealizedPnl)} | ${formatPercent(position.unrealizedPct)}</small>
               </td>
-              <td>${actionMarkup}</td>
             `;
             return row;
           })
-        : [makePaperBotEmptyRow("No open paper positions yet.", 6)]),
+        : [makePaperBotEmptyRow("No open paper positions yet.", 5)]),
     );
   }
   if (paperBotTransactionsCount) {
@@ -6563,10 +6627,6 @@ function selectPaperBotPositionTicker(ticker) {
 }
 
 function openPaperBotCloseConfirm(ticker) {
-  if (paperBotState.mode === "max_autonomous_cloud") {
-    setPaperBotLiveStatus("Desktop and mobile now use the same cloud ledger. Manual closes must be handled by Max's cloud run to stay synced.", "warning");
-    return;
-  }
   const normalizedTicker = getPaperBotTicker(ticker);
   const position = paperBotState.positions?.[normalizedTicker];
   if (!paperBotCloseConfirmModal || !position) {
@@ -6577,8 +6637,9 @@ function openPaperBotCloseConfirm(ticker) {
   const shares = Number(position.shares ?? 0);
   const value = shares * markPrice;
   if (paperBotCloseConfirmMessage) {
-    paperBotCloseConfirmMessage.textContent =
-      `Are you sure you want to manually close ${normalizedTicker} at the current mark of ${formatMoney(markPrice)} for an estimated ${formatMoney(value)} trade value?`;
+    paperBotCloseConfirmMessage.textContent = paperBotState.mode === "max_autonomous_cloud"
+      ? `Are you sure you want to close ${normalizedTicker} at the current mark of ${formatMoney(markPrice)} for an estimated ${formatMoney(value)} trade value? This closes the trade now and then syncs it to the shared cloud ledger when the sync endpoint is available.`
+      : `Are you sure you want to manually close ${normalizedTicker} at the current mark of ${formatMoney(markPrice)} for an estimated ${formatMoney(value)} trade value?`;
   }
   paperBotCloseConfirmModal.hidden = false;
   paperBotCloseConfirmModal.setAttribute("aria-hidden", "false");
@@ -6598,13 +6659,26 @@ function closePaperBotCloseConfirm() {
   }
 }
 
-function manuallyClosePaperBotTrade(ticker) {
-  if (paperBotState.mode === "max_autonomous_cloud") {
-    closePaperBotCloseConfirm();
-    setPaperBotLiveStatus("Manual close skipped because cloud mode is synced from the published Max ledger.", "warning");
-    renderPaperBotPanelForCurrentSelection();
-    return;
+async function submitPaperBotManualClose(trade) {
+  const syncUrl = buildPaperBotSyncUrl("/paper-bot/close");
+  if (!syncUrl) {
+    throw new Error("No paper bot sync endpoint configured.");
   }
+  return fetchJsonRequest(
+    syncUrl,
+    {
+      method: "POST",
+      headers: getPaperBotSyncHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        trade,
+        submittedAt: new Date().toISOString(),
+      }),
+    },
+    15000,
+  );
+}
+
+async function manuallyClosePaperBotTrade(ticker) {
   const normalizedTicker = getPaperBotTicker(ticker);
   const position = paperBotState.positions?.[normalizedTicker];
   if (!position) {
@@ -6635,13 +6709,29 @@ function manuallyClosePaperBotTrade(ticker) {
     openedAt: position.openedAt,
     reason: "Manual override: user closed this paper trade at the current mark.",
   });
-  if (paperBotState.mode === "max_autonomous_cloud") {
+  const isCloudMode = paperBotState.mode === "max_autonomous_cloud";
+  if (isCloudMode) {
     rememberPaperBotManualClose(recordedTrade);
   }
   savePaperBotState();
   closePaperBotCloseConfirm();
   renderPaperBotPanelForCurrentSelection();
   schedulePaperBotLiveRefresh();
+  if (!isCloudMode) {
+    return;
+  }
+  if (!hasPaperBotCloudSync()) {
+    setPaperBotLiveStatus("Trade closed on this device. Add paper-bot sync in live_config.js to share the close across desktop and mobile.", "warning");
+    return;
+  }
+  setPaperBotLiveStatus(`Closing ${normalizedTicker} and syncing it to Max's cloud ledger...`, "buy");
+  try {
+    await submitPaperBotManualClose(recordedTrade);
+    await refreshPaperBotCloudState({ immediate: true, force: true });
+    setPaperBotLiveStatus(`${normalizedTicker} close synced to the shared cloud ledger.`, "buy");
+  } catch (error) {
+    setPaperBotLiveStatus("Trade closed locally, but cloud sync did not confirm. The close will stay on this device until sync is available again.", "warning");
+  }
 }
 
 function resetPaperBot() {
