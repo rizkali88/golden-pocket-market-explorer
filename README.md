@@ -130,7 +130,7 @@ Notes:
 
 - This keeps recurring directory refreshes on a `zero-dollar` data stack, but it is not a full real-time price feed.
 - The SEC requires a declared user agent and fair-access behavior, with a published max rate of `10 requests/second`.
-- The page uses automatic 10-year daily price-history modeling for research-ready tickers and can add FMP fundamentals when `FMP_API_KEY` is available.
+- The page uses automatic price-history modeling for research-ready tickers and can add FMP fundamentals when `FMP_API_KEY` is available.
 
 ## Automatic Research Profiles
 
@@ -150,19 +150,17 @@ Outputs:
 How it works:
 
 1. Loads the SEC-backed ticker universe
-2. Pulls 10-year daily market history in batches
+2. Pulls 1-year daily market history in batches
 3. Computes automatic trend, rebound, risk, sector-support, and confidence scores
 4. Generates `bear`, `base`, and `bull` targets plus a recommended method lens
 5. Optionally enriches fundamentals from Financial Modeling Prep when `FMP_API_KEY` is configured
 6. Merges the generated profiles into the webpage, while manual pilot profiles still override the automated output where deeper research exists
-7. Keeps intraday `1m`, `15m`, and `4h` pulls on-demand for the selected ticker through the live FMP chart feed instead of storing intraday history for the whole universe
 
 Useful options:
 
 ```powershell
 & 'C:\Users\aliri\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' build_research_profiles.py --limit 250
 & 'C:\Users\aliri\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' build_research_profiles.py --batch-size 20 --max-workers 4 --pause-seconds 0.2
-& 'C:\Users\aliri\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' build_research_profiles.py --daily-history-range 10y
 ```
 
 ### Financial Modeling Prep Fundamentals
@@ -184,6 +182,30 @@ GitHub Actions setup:
 4. Run `Actions` -> `Refresh Market Data And Deploy Webapp`.
 
 The key is used only during the build workflow. It is not written into `webapp/` and is not exposed to visitors of the static GitHub Pages site.
+
+### Max Paper Bot Cloud Sync
+
+The paper bot can now accept manual `Close trade` requests from the webapp while keeping the published cloud ledger in sync across devices.
+
+To enable it:
+
+1. Copy `integrations/wrangler.paper-bot-sync.example.toml` to `integrations/wrangler.paper-bot-sync.toml`.
+2. Log in to Cloudflare: `npx.cmd wrangler login`.
+3. Create the KV namespace: `npx.cmd wrangler kv namespace create PAPER_BOT_SYNC`.
+4. Paste the returned namespace id into `integrations/wrangler.paper-bot-sync.toml`.
+5. Set `PAPER_BOT_SYNC_TOKEN` as a Worker secret with `npx.cmd wrangler secret put PAPER_BOT_SYNC_TOKEN --config integrations/wrangler.paper-bot-sync.toml`, then use the same value as the local device sync key in the webapp.
+6. Deploy the worker: `npx.cmd wrangler deploy --config integrations/wrangler.paper-bot-sync.toml`.
+7. Confirm `https://your-worker.workers.dev/paper-bot/health` returns `ok: true`.
+8. Set `paperBotSyncBaseUrl` in `webapp/data/live_config.js` to the worker base URL.
+9. In GitHub Actions, add repository secrets named `MAX_PAPER_SYNC_BASE_URL` and `MAX_PAPER_SYNC_TOKEN`.
+
+Once configured:
+
+- the webapp can post manual close requests to the worker
+- desktop and mobile can read the same merged cloud view
+- the scheduled Max workflow consumes queued manual closes before the next cloud run and acknowledges them after the refreshed ledger is published
+
+Manual closes are intentionally limited to the NYSE regular session shown in the paper-bot market clock. This avoids filling a paper close against stale after-hours marks.
 
 ## Full Automatic Build
 

@@ -1381,6 +1381,76 @@ body::before {
   font-weight: 900;
 }
 
+#paper-bot-equity-change {
+  margin-top: -4px;
+  color: var(--muted);
+  font-size: clamp(0.9rem, 1.25vw, 1.08rem);
+}
+
+#paper-bot-equity-change[data-tone="positive"] {
+  color: var(--accent);
+}
+
+#paper-bot-equity-change[data-tone="negative"] {
+  color: #e86f61;
+}
+
+.paper-bot-market-clock {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  width: min(100%, 390px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(9, 16, 29, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.paper-bot-market-clock__dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--warn);
+  box-shadow: 0 0 0 5px rgba(255, 155, 97, 0.12);
+}
+
+.paper-bot-market-clock[data-state="open"] .paper-bot-market-clock__dot,
+.paper-bot-market-clock[data-state="early-close"] .paper-bot-market-clock__dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 5px rgba(99, 210, 200, 0.12), 0 0 18px rgba(99, 210, 200, 0.28);
+}
+
+.paper-bot-market-clock[data-state="holiday"] .paper-bot-market-clock__dot,
+.paper-bot-market-clock[data-state="closed"] .paper-bot-market-clock__dot,
+.paper-bot-market-clock[data-state="preopen"] .paper-bot-market-clock__dot {
+  background: var(--warn);
+}
+
+.paper-bot-market-clock strong,
+.paper-bot-market-clock small {
+  display: block;
+}
+
+.paper-bot-market-clock strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.paper-bot-market-clock small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 850;
+}
+
 .paper-bot-portfolio__chart {
   display: grid;
   gap: 8px;
@@ -1812,6 +1882,17 @@ body::before {
   transform: translateY(-1px);
   border-color: rgba(232, 111, 97, 0.78);
   background: rgba(232, 111, 97, 0.18);
+}
+
+.paper-bot-close-trade.is-blocked {
+  border-color: rgba(255, 155, 97, 0.38);
+  background: rgba(255, 155, 97, 0.08);
+  color: color-mix(in srgb, var(--ink) 78%, var(--muted));
+}
+
+.paper-bot-close-trade.is-blocked:hover {
+  border-color: rgba(255, 155, 97, 0.68);
+  background: rgba(255, 155, 97, 0.14);
 }
 
 .paper-bot-cloud-sync {

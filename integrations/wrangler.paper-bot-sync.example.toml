@@ -1,0 +1,18 @@
+name = "golden-pocket-paper-bot-sync"
+main = "fmp-live-proxy-worker.js"
+compatibility_date = "2026-05-15"
+workers_dev = true
+
+# This URL is read by GET /paper-bot/state and merged with queued manual closes.
+[vars]
+PAPER_BOT_STATE_URL = "https://rizkali88.github.io/golden-pocket-market-explorer/data/max_bot_state.js"
+
+# Set secrets separately; do not commit them here:
+#   npx.cmd wrangler secret put FMP_API_KEY --config integrations/wrangler.paper-bot-sync.toml
+#   npx.cmd wrangler secret put PAPER_BOT_SYNC_TOKEN --config integrations/wrangler.paper-bot-sync.toml
+#
+# Replace the id below with the namespace id returned by:
+#   npx.cmd wrangler kv namespace create PAPER_BOT_SYNC
+[[kv_namespaces]]
+binding = "PAPER_BOT_SYNC"
+id = "REPLACE_WITH_PAPER_BOT_SYNC_KV_NAMESPACE_ID"

@@ -27,6 +27,10 @@ FMP_STABLE_BASE_URL = "https://financialmodelingprep.com/stable"
 PRIMARY_EXCHANGES = {"NYSE", "NASDAQ", "NASDAQ CAPITAL MARKET", "NYSE AMERICAN", "NYSE ARCA"}
 
 
+def clean_trade_id(value: Any) -> str:
+    return re.sub(r"[^A-Za-z0-9._:-]", "", str(value or "").strip())[:120]
+
+
 def clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
     return max(low, min(high, value))
 
@@ -651,6 +655,50 @@ def load_state(path: Path) -> dict[str, Any]:
     return state
 
 
+def sync_headers(sync_token: str = "") -> dict[str, str]:
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json; charset=utf-8",
+        "User-Agent": "GoldenPocketMaxPaperBot/1.0",
+    }
+    if sync_token:
+        headers["x-paper-bot-token"] = sync_token
+    return headers
+
+
+def fetch_manual_close_requests(sync_base_url: str, sync_token: str = "", timeout: float = 15.0) -> list[dict[str, Any]]:
+    base_url = str(sync_base_url or "").rstrip("/")
+    if not base_url:
+        return []
+    request = Request(f"{base_url}/paper-bot/requests", headers=sync_headers(sync_token))
+    with urlopen(request, timeout=timeout) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    if isinstance(payload, dict) and isinstance(payload.get("manualCloses"), list):
+        return [item for item in payload["manualCloses"] if isinstance(item, dict)]
+    return []
+
+
+def acknowledge_manual_close_requests(
+    sync_base_url: str,
+    trade_ids: list[str],
+    sync_token: str = "",
+    timeout: float = 15.0,
+) -> None:
+    base_url = str(sync_base_url or "").rstrip("/")
+    normalized_ids = [clean_trade_id(item) for item in trade_ids if clean_trade_id(item)]
+    if not base_url or not normalized_ids:
+        return
+    body = json.dumps({"ids": normalized_ids}).encode("utf-8")
+    request = Request(
+        f"{base_url}/paper-bot/ack",
+        data=body,
+        headers=sync_headers(sync_token),
+        method="POST",
+    )
+    with urlopen(request, timeout=timeout):
+        return
+
+
 def choose_quote_symbols(
     profiles: list[dict[str, Any]],
     state: dict[str, Any],
@@ -682,11 +730,82 @@ def choose_quote_symbols(
 
 
 def add_trade(state: dict[str, Any], trade: dict[str, Any]) -> None:
-    trade_id = f"{datetime.now(UTC).timestamp():.0f}-{trade.get('ticker', 'MAX')}"
+    trade_id = clean_trade_id(trade.get("id")) or f"{datetime.now(UTC).timestamp():.0f}-{trade.get('ticker', 'MAX')}"
+    trade_time = str(trade.get("time") or now_iso())
     state["trades"] = [
-        {"id": trade_id, "time": now_iso(), **trade},
+        {"id": trade_id, "time": trade_time, **{key: value for key, value in trade.items() if key not in {"id", "time"}}},
         *state.get("trades", []),
     ][:250]
+
+
+def normalize_manual_close_trade(raw_trade: Any) -> dict[str, Any] | None:
+    if not isinstance(raw_trade, dict):
+        return None
+    ticker = str(raw_trade.get("ticker") or "").upper().strip()
+    if not ticker:
+        return None
+    exit_price = number(raw_trade.get("exitPrice"), number(raw_trade.get("price"), 0.0)) or 0.0
+    entry_price = number(raw_trade.get("entryPrice"), exit_price) or exit_price
+    shares = number(raw_trade.get("shares"), 0.0) or 0.0
+    value = number(raw_trade.get("value"), shares * exit_price) or 0.0
+    realized_pnl = number(raw_trade.get("realizedPnl"), number(raw_trade.get("pnl"), (exit_price - entry_price) * shares)) or 0.0
+    trade_id = clean_trade_id(raw_trade.get("id")) or f"{int(datetime.now(UTC).timestamp())}-{ticker}"
+    return {
+        "id": trade_id,
+        "time": str(raw_trade.get("time") or now_iso()),
+        "type": "SELL",
+        "ticker": ticker,
+        "shares": round(shares, 4),
+        "entryPrice": round(entry_price, 4),
+        "exitPrice": round(exit_price, 4),
+        "price": round(exit_price, 4),
+        "value": round(value, 4),
+        "realizedPnl": round(realized_pnl, 4),
+        "pnl": round(realized_pnl, 4),
+        "manualOverride": True,
+        "openedAt": str(raw_trade.get("openedAt") or ""),
+        "reason": str(raw_trade.get("reason") or "Manual override: user closed this paper trade at the current mark."),
+    }
+
+
+def apply_manual_close_requests(state: dict[str, Any], close_requests: list[dict[str, Any]]) -> list[str]:
+    if not close_requests:
+        return []
+    processed_ids: list[str] = []
+    positions = state.get("positions") if isinstance(state.get("positions"), dict) else {}
+    state["positions"] = positions
+    trade_ids = {clean_trade_id(trade.get("id")) for trade in state.get("trades", []) if isinstance(trade, dict)}
+    for raw_trade in close_requests:
+        trade = normalize_manual_close_trade(raw_trade)
+        if not trade:
+            continue
+        trade_id = trade["id"]
+        if trade_id in trade_ids:
+            processed_ids.append(trade_id)
+            continue
+        ticker = trade["ticker"]
+        position = positions.get(ticker)
+        opened_at_matches = (
+            not trade.get("openedAt")
+            or not isinstance(position, dict)
+            or not position.get("openedAt")
+            or str(trade.get("openedAt")) == str(position.get("openedAt"))
+        )
+        if isinstance(position, dict) and opened_at_matches:
+            del positions[ticker]
+            state["cash"] = round((number(state.get("cash"), 0.0) or 0.0) + (number(trade.get("value"), 0.0) or 0.0), 4)
+            state["realizedPnl"] = round(
+                (number(state.get("realizedPnl"), 0.0) or 0.0)
+                + (number(trade.get("realizedPnl"), number(trade.get("pnl"), 0.0)) or 0.0),
+                4,
+            )
+            add_trade(state, trade)
+            trade_ids.add(trade_id)
+            processed_ids.append(trade_id)
+            continue
+        if not isinstance(position, dict):
+            processed_ids.append(trade_id)
+    return processed_ids
 
 
 def account_equity(state: dict[str, Any]) -> float:
@@ -1071,6 +1190,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--history-dir", default="webapp/data/history")
     parser.add_argument("--max-open-positions", type=int, default=DEFAULT_MAX_OPEN_POSITIONS)
     parser.add_argument("--fmp-api-key", default=os.environ.get("FMP_API_KEY", ""))
+    parser.add_argument("--sync-base-url", default=os.environ.get("MAX_PAPER_SYNC_BASE_URL", ""))
+    parser.add_argument("--sync-token", default=os.environ.get("MAX_PAPER_SYNC_TOKEN", ""))
     parser.add_argument("--quote-candidate-limit", type=int, default=DEFAULT_QUOTE_CANDIDATE_LIMIT)
     parser.add_argument("--quote-batch-size", type=int, default=DEFAULT_QUOTE_BATCH_SIZE)
     return parser.parse_args()
@@ -1082,6 +1203,15 @@ def main() -> None:
     profiles = profiles_payload.get("profiles") or []
     state_path = Path(args.state_path)
     state = load_state(state_path)
+    processed_manual_close_ids: list[str] = []
+    if args.sync_base_url:
+        try:
+            close_requests = fetch_manual_close_requests(args.sync_base_url, args.sync_token)
+            processed_manual_close_ids = apply_manual_close_requests(state, close_requests)
+            if processed_manual_close_ids:
+                print(f"Applied {len(processed_manual_close_ids)} cloud manual close request(s) before Max scanned.")
+        except Exception as error:  # noqa: BLE001 - manual close sync should not block the scheduled run.
+            print(f"Skipped manual close sync for Max: {error}")
     history_by_ticker: dict[str, dict[str, Any]] = {}
     history_dir = Path(args.history_dir)
     if history_dir.exists():
@@ -1121,6 +1251,11 @@ def main() -> None:
         history_by_ticker=history_by_ticker,
     )
     write_outputs(state, state_path, Path(args.js_path))
+    if args.sync_base_url and processed_manual_close_ids:
+        try:
+            acknowledge_manual_close_requests(args.sync_base_url, processed_manual_close_ids, args.sync_token)
+        except Exception as error:  # noqa: BLE001 - ack failure should not block the refreshed ledger.
+            print(f"Could not acknowledge Max manual close requests: {error}")
     print(state["lastRunSummary"])
 
 

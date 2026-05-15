@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golden Pocket Market Explorer - Working Draft</title>
-    <link rel="stylesheet" href="./styles.css?v=20260515-sync-guard" />
+    <link rel="stylesheet" href="./styles.css?v=20260515-cloud-sync-ui" />
   </head>
   <body class="workbench-page">
     <div class="app-shell">
@@ -95,6 +95,7 @@
                   View transactions
                   <span id="paper-bot-transactions-count">0</span>
                 </button>
+                <button type="button" class="paper-bot-button paper-bot-button--ghost" id="paper-bot-sync-connect" hidden>Sync key</button>
                 <button type="button" class="paper-bot-button" id="paper-bot-auto-toggle" aria-pressed="true" hidden>Max cloud: On</button>
                 <button type="button" class="paper-bot-button" id="paper-bot-evaluate" hidden>Manual evaluate</button>
                 <button type="button" class="paper-bot-button paper-bot-button--ghost" id="paper-bot-reset" hidden>Reset local $10k</button>
@@ -107,14 +108,20 @@
                   <span>Account equity</span>
                   <strong id="paper-bot-equity">$10,000.00</strong>
                   <small id="paper-bot-return">0.00% total return</small>
+                  <small id="paper-bot-equity-change" data-tone="neutral">$0.00 | 0.00%</small>
+                  <div class="paper-bot-market-clock" id="paper-bot-market-clock" data-state="closed">
+                    <span class="paper-bot-market-clock__dot" aria-hidden="true"></span>
+                    <div>
+                      <strong id="paper-bot-market-status">Market status loading</strong>
+                      <small id="paper-bot-market-countdown">Checking NYSE regular session.</small>
+                    </div>
+                  </div>
                   <div class="paper-bot-metrics" id="paper-bot-metrics"></div>
                 </div>
                 <div class="paper-bot-portfolio__chart">
                   <div class="holdings-chart__header">
                     <div>
                       <span>Equity curve</span>
-                      <strong id="paper-bot-holdings-value" hidden>$0.00</strong>
-                      <small id="paper-bot-holdings-return">$0.00 | 0.00%</small>
                     </div>
                     <div class="holdings-chart__ranges" id="paper-bot-holdings-ranges" aria-label="Holdings chart range"></div>
                   </div>
@@ -559,11 +566,13 @@
 
         setText("#paper-bot-equity", formatMoney(equity));
         setText("#paper-bot-return", `${formatPercent(returnPct)} total return`);
-        setText("#paper-bot-holdings-value", formatMoney(equity));
-        setText(
-          "#paper-bot-holdings-return",
-          `${formatSignedMoney(equity - startingCash)} | ${formatPercent(returnPct)}`,
-        );
+        const equityChange = setText("#paper-bot-equity-change", `${formatSignedMoney(equity - startingCash)} | ${formatPercent(returnPct)}`);
+        if (equityChange) {
+          equityChange.dataset.tone = equity > startingCash ? "positive" : equity < startingCash ? "negative" : "neutral";
+        }
+        const marketStatus = setText("#paper-bot-market-status", "Market clock loading");
+        setText("#paper-bot-market-countdown", "Full session timer loads with the app.");
+        marketStatus?.closest?.("#paper-bot-market-clock")?.setAttribute("data-state", "preopen");
         const holdingsChart = document.querySelector("#paper-bot-holdings-chart");
         const holdingsPath = document.querySelector("#paper-bot-holdings-path");
         const holdingsFill = document.querySelector("#paper-bot-holdings-fill");
@@ -687,7 +696,7 @@
 
     <script>
       (() => {
-        const cacheVersion = "20260515-sync-guard";
+        const cacheVersion = "20260515-cloud-sync-ui";
         const liveStateVersion = String(Date.now());
         const dependencyScripts = [
           "./data/market_universe.js",

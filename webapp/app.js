@@ -1041,9 +1041,14 @@ const paperBotEvaluate = document.querySelector("#paper-bot-evaluate");
 const paperBotReset = document.querySelector("#paper-bot-reset");
 const paperBotEquity = document.querySelector("#paper-bot-equity");
 const paperBotReturn = document.querySelector("#paper-bot-return");
+const paperBotEquityChange = document.querySelector("#paper-bot-equity-change");
+const paperBotMarketClock = document.querySelector("#paper-bot-market-clock");
+const paperBotMarketStatus = document.querySelector("#paper-bot-market-status");
+const paperBotMarketCountdown = document.querySelector("#paper-bot-market-countdown");
 const paperBotMetrics = document.querySelector("#paper-bot-metrics");
 const paperBotInstruction = document.querySelector("#paper-bot-instruction");
 const paperBotReason = document.querySelector("#paper-bot-reason");
+const paperBotSyncConnect = document.querySelector("#paper-bot-sync-connect");
 const paperBotHoldingsValue = document.querySelector("#paper-bot-holdings-value");
 const paperBotHoldingsReturn = document.querySelector("#paper-bot-holdings-return");
 const paperBotHoldingsRanges = document.querySelector("#paper-bot-holdings-ranges");
@@ -1122,8 +1127,10 @@ const decisionModelCache = new Map();
 let maxExecutionLiveTimer = null;
 let paperBotLiveTimer = null;
 let paperBotCloudStateTimer = null;
+let paperBotMarketClockTimer = null;
 let paperBotLiveRefreshInFlight = false;
 let paperBotCloudStateRefreshInFlight = false;
+let paperBotMarketStatusSnapshot = null;
 
 const maxExecutionLiveConfig = {
   provider: "fmp",
@@ -1137,6 +1144,7 @@ const maxExecutionLiveConfig = {
 const FMP_DIRECT_BASE_URL = "https://financialmodelingprep.com/stable";
 const FMP_LOCAL_KEY_STORAGE_KEY = "golden-pocket-fmp-api-key";
 const FMP_LIVE_ENABLED_STORAGE_KEY = "golden-pocket-fmp-live-enabled";
+const PAPER_BOT_SYNC_TOKEN_STORAGE_KEY = "golden-pocket-paper-bot-sync-token";
 let maxExecutionLiveEnabled =
   window.localStorage.getItem(FMP_LIVE_ENABLED_STORAGE_KEY) === "on";
 const PAPER_BOT_STORAGE_KEY = "golden-pocket-paper-bot-v1";
@@ -1145,6 +1153,48 @@ const PAPER_BOT_STARTING_CASH = 10000;
 const PAPER_BOT_MAX_POSITION_FRACTION = 0.2;
 const PAPER_BOT_RISK_FRACTION = 0.01;
 const PAPER_BOT_CLOUD_REFRESH_SECONDS = 60;
+const PAPER_BOT_MARKET_TIME_ZONE = "America/New_York";
+const PAPER_BOT_MARKET_OPEN_MINUTES = 9 * 60 + 30;
+const PAPER_BOT_MARKET_CLOSE_MINUTES = 16 * 60;
+const PAPER_BOT_MARKET_EARLY_CLOSE_MINUTES = 13 * 60;
+const PAPER_BOT_MARKET_HOLIDAYS = {
+  "2026-01-01": "New Year's Day",
+  "2026-01-19": "Martin Luther King Jr. Day",
+  "2026-02-16": "Washington's Birthday",
+  "2026-04-03": "Good Friday",
+  "2026-05-25": "Memorial Day",
+  "2026-06-19": "Juneteenth National Independence Day",
+  "2026-07-03": "Independence Day observed",
+  "2026-09-07": "Labor Day",
+  "2026-11-26": "Thanksgiving Day",
+  "2026-12-25": "Christmas Day",
+  "2027-01-01": "New Year's Day",
+  "2027-01-18": "Martin Luther King Jr. Day",
+  "2027-02-15": "Washington's Birthday",
+  "2027-03-26": "Good Friday",
+  "2027-05-31": "Memorial Day",
+  "2027-06-18": "Juneteenth National Independence Day observed",
+  "2027-07-05": "Independence Day observed",
+  "2027-09-06": "Labor Day",
+  "2027-11-25": "Thanksgiving Day",
+  "2027-12-24": "Christmas Day observed",
+  "2028-01-17": "Martin Luther King Jr. Day",
+  "2028-02-21": "Washington's Birthday",
+  "2028-04-14": "Good Friday",
+  "2028-05-29": "Memorial Day",
+  "2028-06-19": "Juneteenth National Independence Day",
+  "2028-07-04": "Independence Day",
+  "2028-09-04": "Labor Day",
+  "2028-11-23": "Thanksgiving Day",
+  "2028-12-25": "Christmas Day",
+};
+const PAPER_BOT_MARKET_EARLY_CLOSES = {
+  "2026-11-27": "Day after Thanksgiving",
+  "2026-12-24": "Christmas Eve",
+  "2027-11-26": "Day after Thanksgiving",
+  "2028-07-03": "Independence Day early close",
+  "2028-11-24": "Day after Thanksgiving",
+};
 let paperBotState = loadPaperBotState();
 let pendingPaperBotCloseTicker = null;
 let currentPaperBotHoldingsRangeId =
@@ -2106,7 +2156,11 @@ function renderPaperBotHoldingsSvg(series, snapshot) {
 function renderPaperBotHoldingsChart(snapshot) {
   renderPaperBotHoldingsRangeSwitcher();
   const totalPnl = snapshot.equity - PAPER_BOT_STARTING_CASH;
-  const pnlTone = totalPnl >= 0 ? "positive" : "negative";
+  const pnlTone = totalPnl > 0 ? "positive" : totalPnl < 0 ? "negative" : "neutral";
+  if (paperBotEquityChange) {
+    paperBotEquityChange.textContent = `${formatSignedMoney(totalPnl)} | ${formatPercent(snapshot.returnPct)}`;
+    paperBotEquityChange.dataset.tone = pnlTone;
+  }
   if (paperBotHoldingsValue) {
     paperBotHoldingsValue.textContent = formatMoney(snapshot.equity);
   }
@@ -5737,12 +5791,28 @@ function hasPaperBotCloudSync() {
   return Boolean(getPaperBotSyncBaseUrl());
 }
 
+function getPaperBotSyncToken() {
+  return (
+    window.localStorage.getItem(PAPER_BOT_SYNC_TOKEN_STORAGE_KEY) ||
+    String(maxExecutionLiveConfig.paperBotSyncToken || "")
+  ).trim();
+}
+
+function setPaperBotSyncToken(token) {
+  const normalizedToken = String(token || "").trim();
+  if (normalizedToken) {
+    window.localStorage.setItem(PAPER_BOT_SYNC_TOKEN_STORAGE_KEY, normalizedToken);
+  } else {
+    window.localStorage.removeItem(PAPER_BOT_SYNC_TOKEN_STORAGE_KEY);
+  }
+}
+
 function getPaperBotSyncHeaders(extraHeaders = {}) {
   const headers = {
     Accept: "application/json",
     ...extraHeaders,
   };
-  const token = String(maxExecutionLiveConfig.paperBotSyncToken || "").trim();
+  const token = getPaperBotSyncToken();
   if (token) {
     headers["x-paper-bot-token"] = token;
   }
@@ -6249,6 +6319,253 @@ function setPaperBotLiveStatus(message, state = "idle") {
   paperBotLiveStatus.dataset.state = state;
 }
 
+function updatePaperBotSyncConnectUi() {
+  if (!paperBotSyncConnect) {
+    return;
+  }
+  paperBotSyncConnect.hidden = !hasPaperBotCloudSync();
+  const hasToken = Boolean(getPaperBotSyncToken());
+  paperBotSyncConnect.textContent = hasToken ? "Sync key set" : "Sync key";
+  paperBotSyncConnect.classList.toggle("is-active", hasToken);
+  paperBotSyncConnect.title = hasToken
+    ? "Update or clear the paper-bot cloud sync key stored on this device"
+    : "Add the paper-bot cloud sync key for this device";
+}
+
+function connectPaperBotSyncToken() {
+  const currentToken = getPaperBotSyncToken();
+  const nextToken = window.prompt(
+    "Enter the paper-bot sync key for this device. Leave blank to clear it.",
+    currentToken,
+  );
+  if (nextToken === null) {
+    return;
+  }
+  setPaperBotSyncToken(nextToken);
+  updatePaperBotSyncConnectUi();
+  if (hasPaperBotCloudSync()) {
+    refreshPaperBotCloudState({ immediate: true, force: true });
+  }
+}
+
+const paperBotEtFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: PAPER_BOT_MARKET_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+function getPaperBotEtParts(date = new Date()) {
+  const parts = Object.fromEntries(
+    paperBotEtFormatter.formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+    second: Number(parts.second),
+  };
+}
+
+function getPaperBotDateKey(parts) {
+  return [
+    parts.year,
+    String(parts.month).padStart(2, "0"),
+    String(parts.day).padStart(2, "0"),
+  ].join("-");
+}
+
+function parsePaperBotDateKey(key) {
+  const [year, month, day] = String(key).split("-").map(Number);
+  return { year, month, day };
+}
+
+function addPaperBotDateKey(key, days) {
+  const { year, month, day } = parsePaperBotDateKey(key);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return getPaperBotDateKey({
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+  });
+}
+
+function getPaperBotWeekday(key) {
+  const { year, month, day } = parsePaperBotDateKey(key);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}
+
+function getPaperBotMarketSession(key) {
+  const weekday = getPaperBotWeekday(key);
+  if (weekday === 0 || weekday === 6) {
+    return null;
+  }
+  if (PAPER_BOT_MARKET_HOLIDAYS[key]) {
+    return null;
+  }
+  const earlyCloseReason = PAPER_BOT_MARKET_EARLY_CLOSES[key] ?? "";
+  return {
+    key,
+    openMinutes: PAPER_BOT_MARKET_OPEN_MINUTES,
+    closeMinutes: earlyCloseReason ? PAPER_BOT_MARKET_EARLY_CLOSE_MINUTES : PAPER_BOT_MARKET_CLOSE_MINUTES,
+    earlyCloseReason,
+  };
+}
+
+function getPaperBotClosedReason(key) {
+  if (PAPER_BOT_MARKET_HOLIDAYS[key]) {
+    return `Closed for ${PAPER_BOT_MARKET_HOLIDAYS[key]}`;
+  }
+  const weekday = getPaperBotWeekday(key);
+  return weekday === 0 || weekday === 6 ? "Weekend" : "Market closed";
+}
+
+function getPaperBotTimeZoneOffsetMs(date) {
+  const parts = getPaperBotEtParts(date);
+  const zonedTimeAsUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  return zonedTimeAsUtc - date.getTime();
+}
+
+function makePaperBotDateInEt(key, minutes) {
+  const { year, month, day } = parsePaperBotDateKey(key);
+  const hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  const localTimeAsUtc = Date.UTC(year, month - 1, day, hour, minute, 0);
+  let resolvedDate = new Date(localTimeAsUtc);
+  for (let index = 0; index < 3; index += 1) {
+    resolvedDate = new Date(localTimeAsUtc - getPaperBotTimeZoneOffsetMs(resolvedDate));
+  }
+  return resolvedDate;
+}
+
+function findNextPaperBotMarketSession(fromKey, includeToday = false) {
+  let key = includeToday ? fromKey : addPaperBotDateKey(fromKey, 1);
+  for (let offset = 0; offset < 370; offset += 1) {
+    const session = getPaperBotMarketSession(key);
+    if (session) {
+      return session;
+    }
+    key = addPaperBotDateKey(key, 1);
+  }
+  return null;
+}
+
+function formatPaperBotMarketTime(minutes) {
+  const hour24 = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  const suffix = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 || 12;
+  return `${hour12}:${String(minute).padStart(2, "0")} ${suffix} ET`;
+}
+
+function formatPaperBotCountdown(targetDate, now = new Date()) {
+  const totalSeconds = Math.max(0, Math.ceil((targetDate.getTime() - now.getTime()) / 1000));
+  const days = Math.floor(totalSeconds / 86_400);
+  const hours = Math.floor((totalSeconds % 86_400) / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
+  if (days > 0) {
+    return `${days}d ${hours}h`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+  return `${seconds}s`;
+}
+
+function getPaperBotMarketStatus(now = new Date()) {
+  const etParts = getPaperBotEtParts(now);
+  const key = getPaperBotDateKey(etParts);
+  const currentMinutes = etParts.hour * 60 + etParts.minute + etParts.second / 60;
+  const todaySession = getPaperBotMarketSession(key);
+  if (todaySession && currentMinutes < todaySession.openMinutes) {
+    const opensAt = makePaperBotDateInEt(key, todaySession.openMinutes);
+    return {
+      isOpen: false,
+      state: "preopen",
+      label: "Market closed",
+      detail: `Opens in ${formatPaperBotCountdown(opensAt, now)} (${formatPaperBotMarketTime(todaySession.openMinutes)})`,
+      nextEventAt: opensAt,
+    };
+  }
+  if (todaySession && currentMinutes >= todaySession.openMinutes && currentMinutes < todaySession.closeMinutes) {
+    const closesAt = makePaperBotDateInEt(key, todaySession.closeMinutes);
+    return {
+      isOpen: true,
+      state: todaySession.earlyCloseReason ? "early-close" : "open",
+      label: todaySession.earlyCloseReason ? "Market open - early close" : "Market open",
+      detail: `Closes in ${formatPaperBotCountdown(closesAt, now)} (${formatPaperBotMarketTime(todaySession.closeMinutes)})`,
+      nextEventAt: closesAt,
+    };
+  }
+  const nextSession = findNextPaperBotMarketSession(key, false);
+  const opensAt = nextSession ? makePaperBotDateInEt(nextSession.key, nextSession.openMinutes) : null;
+  return {
+    isOpen: false,
+    state: PAPER_BOT_MARKET_HOLIDAYS[key] ? "holiday" : "closed",
+    label: getPaperBotClosedReason(key),
+    detail: opensAt
+      ? `Opens in ${formatPaperBotCountdown(opensAt, now)} (${formatPaperBotMarketTime(nextSession.openMinutes)})`
+      : "Next regular session unavailable",
+    nextEventAt: opensAt,
+  };
+}
+
+function getPaperBotCloseBlockMessage(ticker = "") {
+  const normalizedTicker = ticker ? getPaperBotTicker(ticker) : "this trade";
+  const marketStatus = paperBotMarketStatusSnapshot ?? getPaperBotMarketStatus();
+  const reasons = [];
+  if (!marketStatus.isOpen) {
+    reasons.push(`${marketStatus.label}. ${marketStatus.detail}.`);
+  }
+  if (paperBotState.mode === "max_autonomous_cloud" && !hasPaperBotCloudSync()) {
+    reasons.push("Paper-bot cloud sync is not configured yet.");
+  }
+  return reasons.length ? `Cannot close ${normalizedTicker} yet. ${reasons.join(" ")}` : "";
+}
+
+function syncPaperBotCloseButtons() {
+  document.querySelectorAll("[data-paper-bot-close-trade]").forEach((button) => {
+    const blockMessage = getPaperBotCloseBlockMessage(button.dataset.paperBotCloseTrade);
+    button.classList.toggle("is-blocked", Boolean(blockMessage));
+    button.dataset.blocked = String(Boolean(blockMessage));
+    button.title = blockMessage || "Close this paper trade at the current mark";
+  });
+}
+
+function updatePaperBotMarketClock() {
+  paperBotMarketStatusSnapshot = getPaperBotMarketStatus();
+  if (paperBotMarketClock) {
+    paperBotMarketClock.dataset.state = paperBotMarketStatusSnapshot.state;
+  }
+  if (paperBotMarketStatus) {
+    paperBotMarketStatus.textContent = paperBotMarketStatusSnapshot.label;
+  }
+  if (paperBotMarketCountdown) {
+    paperBotMarketCountdown.textContent = paperBotMarketStatusSnapshot.detail;
+  }
+  syncPaperBotCloseButtons();
+}
+
+function startPaperBotMarketClock() {
+  updatePaperBotMarketClock();
+  if (paperBotMarketClockTimer) {
+    window.clearInterval(paperBotMarketClockTimer);
+  }
+  paperBotMarketClockTimer = window.setInterval(updatePaperBotMarketClock, 1000);
+}
+
 function renderPaperBotPanelForCurrentSelection(plan = null) {
   if (paperBotState.mode === "max_autonomous_cloud") {
     renderPaperBotPanel(null, null, null, null, plan);
@@ -6590,6 +6907,7 @@ function renderPaperBotPanel(company = null, johnView = null, maxView = null, de
     paperBotAutoToggle.setAttribute("aria-pressed", String(paperBotState.autoEnabled));
     paperBotAutoToggle.classList.toggle("is-active", paperBotState.autoEnabled);
   }
+  updatePaperBotSyncConnectUi();
   if (paperBotEvaluate) {
     paperBotEvaluate.disabled = !company;
   }
@@ -6602,6 +6920,7 @@ function renderPaperBotPanel(company = null, johnView = null, maxView = null, de
         ? snapshot.positions.map((position) => {
             const row = document.createElement("tr");
             const pnlTone = position.unrealizedPnl >= 0 ? "positive" : "negative";
+            const closeBlockMessage = getPaperBotCloseBlockMessage(position.ticker);
             row.innerHTML = `
               <td>
                 <div class="paper-bot-position-main">
@@ -6609,7 +6928,13 @@ function renderPaperBotPanel(company = null, johnView = null, maxView = null, de
                     <strong>${position.ticker}</strong>
                     <small>${position.name ?? ""}</small>
                   </button>
-                  <button class="paper-bot-close-trade" type="button" data-paper-bot-close-trade="${escapeHtml(position.ticker)}">Close trade</button>
+                  <button
+                    class="paper-bot-close-trade${closeBlockMessage ? " is-blocked" : ""}"
+                    type="button"
+                    data-paper-bot-close-trade="${escapeHtml(position.ticker)}"
+                    data-blocked="${closeBlockMessage ? "true" : "false"}"
+                    title="${escapeHtml(closeBlockMessage || "Close this paper trade at the current mark")}"
+                  >Close trade</button>
                 </div>
               </td>
               <td>${formatNumber(position.shares, 4)}</td>
@@ -6624,6 +6949,7 @@ function renderPaperBotPanel(company = null, johnView = null, maxView = null, de
           })
         : [makePaperBotEmptyRow("No open paper positions yet.", 5)]),
     );
+    syncPaperBotCloseButtons();
   }
   if (paperBotTransactionsCount) {
     paperBotTransactionsCount.textContent = String(paperBotState.trades?.length ?? 0);
@@ -6649,12 +6975,13 @@ function openPaperBotCloseConfirm(ticker) {
   if (!paperBotCloseConfirmModal || !position) {
     return;
   }
-  if (paperBotState.mode === "max_autonomous_cloud" && !hasPaperBotCloudSync()) {
-    clearPaperBotManualOverrides();
-    setPaperBotLiveStatus(
-      `Cannot close ${normalizedTicker} from this browser yet. Add paper-bot sync in live_config.js so desktop and mobile share the same close request.`,
-      "warning",
-    );
+  const blockMessage = getPaperBotCloseBlockMessage(normalizedTicker);
+  if (blockMessage) {
+    if (paperBotState.mode === "max_autonomous_cloud" && !hasPaperBotCloudSync()) {
+      clearPaperBotManualOverrides();
+    }
+    syncPaperBotCloseButtons();
+    setPaperBotLiveStatus(blockMessage, "warning");
     return;
   }
   pendingPaperBotCloseTicker = normalizedTicker;
@@ -6734,6 +7061,16 @@ async function manuallyClosePaperBotTrade(ticker) {
     renderPaperBotPanelForCurrentSelection();
     return;
   }
+  const blockMessage = getPaperBotCloseBlockMessage(normalizedTicker);
+  if (blockMessage) {
+    closePaperBotCloseConfirm();
+    if (paperBotState.mode === "max_autonomous_cloud" && !hasPaperBotCloudSync()) {
+      clearPaperBotManualOverrides();
+    }
+    renderPaperBotPanelForCurrentSelection();
+    setPaperBotLiveStatus(blockMessage, "warning");
+    return;
+  }
   const company = companyUniverseByTicker.get(normalizedTicker);
   const price = getPaperBotMarkPrice(position, company);
   const recordedTrade = buildPaperBotManualCloseTrade(position, normalizedTicker, price);
@@ -6760,8 +7097,11 @@ async function manuallyClosePaperBotTrade(ticker) {
       clearPaperBotManualOverrides();
       await refreshPaperBotCloudState({ immediate: true, force: true });
       renderPaperBotPanelForCurrentSelection();
+      const errorMessage = String(error?.message || "");
       setPaperBotLiveStatus(
-        `No close was saved for ${normalizedTicker} because cloud sync did not confirm. Please try again once sync is reachable.`,
+        errorMessage.includes("401")
+          ? `No close was saved for ${normalizedTicker}. The cloud sync key was rejected on this device.`
+          : `No close was saved for ${normalizedTicker} because cloud sync did not confirm. Please try again once sync is reachable.`,
         "warning",
       );
     }
@@ -7464,6 +7804,10 @@ if (paperBotTransactionsOpen) {
   paperBotTransactionsOpen.addEventListener("click", openPaperBotTransactionsModal);
 }
 
+if (paperBotSyncConnect) {
+  paperBotSyncConnect.addEventListener("click", connectPaperBotSyncToken);
+}
+
 if (paperBotTransactionsClose) {
   paperBotTransactionsClose.addEventListener("click", closePaperBotTransactionsModal);
 }
@@ -7542,6 +7886,7 @@ themeToggle.addEventListener("click", () => {
 
 initializeTheme();
 initializeLayoutMode();
+startPaperBotMarketClock();
 renderPaperBotPanelForCurrentSelection();
 schedulePaperBotCloudStateRefresh();
 schedulePaperBotLiveRefresh();
