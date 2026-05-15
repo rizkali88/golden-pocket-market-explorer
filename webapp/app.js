@@ -1176,6 +1176,15 @@ const PAPER_BOT_HOLDINGS_RANGES = [
   { id: "all", label: "All" },
 ];
 
+const PAPER_BOT_EQUITY_CHART = {
+  width: 1600,
+  height: 360,
+  left: 92,
+  right: 1515,
+  top: 48,
+  bottom: 300,
+};
+
 const MAX_EXECUTION_INTERVALS = [
   { id: "1min", label: "1m", fmpInterval: "1min", maxDays: 5 },
   { id: "15min", label: "15m", fmpInterval: "15min", maxDays: 45 },
@@ -1962,13 +1971,14 @@ function updatePaperBotHoldingsHover(event) {
   if (!point || !paperBotHoldingsHoverLine || !paperBotHoldingsHoverDot || !paperBotHoldingsTooltip || !paperBotHoldingsChartWrap) {
     return;
   }
-  const rect = paperBotHoldingsChartWrap.getBoundingClientRect();
-  const leftPercent = (point.x / 1000) * 100;
+  const leftPercent = (point.x / PAPER_BOT_EQUITY_CHART.width) * 100;
   paperBotHoldingsHoverLine.hidden = false;
   paperBotHoldingsHoverDot.hidden = false;
   paperBotHoldingsTooltip.hidden = false;
   paperBotHoldingsHoverLine.setAttribute("x1", point.x.toFixed(2));
   paperBotHoldingsHoverLine.setAttribute("x2", point.x.toFixed(2));
+  paperBotHoldingsHoverLine.setAttribute("y1", String(PAPER_BOT_EQUITY_CHART.top));
+  paperBotHoldingsHoverLine.setAttribute("y2", String(PAPER_BOT_EQUITY_CHART.bottom));
   paperBotHoldingsHoverDot.setAttribute("cx", point.x.toFixed(2));
   paperBotHoldingsHoverDot.setAttribute("cy", point.y.toFixed(2));
   paperBotHoldingsTooltip.innerHTML = `
@@ -1976,7 +1986,7 @@ function updatePaperBotHoldingsHover(event) {
     <span>${formatPaperBotTooltipDate(point.time)}</span>
   `;
   paperBotHoldingsTooltip.style.left = `${clampNumber(leftPercent, 14, 86)}%`;
-  paperBotHoldingsTooltip.style.top = `${clampNumber((point.y / 260) * 100, 14, 74)}%`;
+  paperBotHoldingsTooltip.style.top = `${clampNumber((point.y / PAPER_BOT_EQUITY_CHART.height) * 100, 14, 74)}%`;
 }
 
 function hidePaperBotHoldingsHover() {
@@ -2062,16 +2072,20 @@ function renderPaperBotHoldingsSvg(series, snapshot) {
   const padding = Math.max((maxValue - minValue) * 0.18, Math.max(maxValue, 1) * 0.004);
   const min = minValue - padding;
   const max = maxValue + padding;
-  const left = 70;
-  const right = 950;
-  const top = 38;
-  const bottom = 214;
+  const { left, right, top, bottom } = PAPER_BOT_EQUITY_CHART;
   const valueRange = Math.max(max - min, 1);
-  const points = series.map((point, index) => ({
-    ...point,
-    x: left + (index / Math.max(series.length - 1, 1)) * (right - left),
-    y: bottom - ((Number(point.value) - min) / valueRange) * (bottom - top),
-  }));
+  const times = series.map((point) => Number(point.time)).filter(Number.isFinite);
+  const minTime = Math.min(...times);
+  const maxTime = Math.max(...times);
+  const timeRange = Math.max(maxTime - minTime, 1);
+  const points = series.map((point) => {
+    const time = Number(point.time);
+    return {
+      ...point,
+      x: left + ((time - minTime) / timeRange) * (right - left),
+      y: bottom - ((Number(point.value) - min) / valueRange) * (bottom - top),
+    };
+  });
   const linePath = makeSmoothSvgPath(points);
   const firstPoint = points[0];
   const lastPoint = points.at(-1);
@@ -5571,6 +5585,7 @@ function createDefaultPaperBotState() {
     realizedPnl: 0,
     positions: {},
     trades: [],
+    equityCurve: [],
     autoEnabled: true,
     lastEvaluations: {},
   };
@@ -5666,6 +5681,7 @@ function normalizePaperBotState(rawState) {
         ? rawState.positions
         : {},
     trades: Array.isArray(rawState.trades) ? rawState.trades.slice(0, 250) : [],
+    equityCurve: Array.isArray(rawState.equityCurve) ? rawState.equityCurve.slice(0, 1000) : [],
     lastEvaluations:
       rawState.lastEvaluations && typeof rawState.lastEvaluations === "object"
         ? rawState.lastEvaluations
@@ -5677,7 +5693,8 @@ function normalizePaperBotState(rawState) {
 function loadPaperBotState() {
   const cloudState = normalizePaperBotState(window.GOLDEN_POCKET_MAX_BOT);
   if (cloudState?.mode === "max_autonomous_cloud") {
-    return applyPaperBotManualOverrides(cloudState);
+    window.localStorage.removeItem(PAPER_BOT_OVERRIDE_STORAGE_KEY);
+    return cloudState;
   }
   try {
     const parsed = JSON.parse(window.localStorage.getItem(PAPER_BOT_STORAGE_KEY) ?? "null");
@@ -5719,7 +5736,8 @@ async function refreshPaperBotCloudState(options = {}) {
       return;
     }
     if (nextState.generatedAt && nextState.generatedAt !== paperBotState.generatedAt) {
-      paperBotState = applyPaperBotManualOverrides(nextState);
+      window.localStorage.removeItem(PAPER_BOT_OVERRIDE_STORAGE_KEY);
+      paperBotState = nextState;
       paperBotMarkPriceCache.clear();
       renderPaperBotPanelForCurrentSelection();
       schedulePaperBotLiveRefresh({ immediate: true });
@@ -6501,6 +6519,10 @@ function renderPaperBotPanel(company = null, johnView = null, maxView = null, de
         ? snapshot.positions.map((position) => {
             const row = document.createElement("tr");
             const pnlTone = position.unrealizedPnl >= 0 ? "positive" : "negative";
+            const actionMarkup =
+              paperBotState.mode === "max_autonomous_cloud"
+                ? `<span class="paper-bot-cloud-sync">Cloud synced</span>`
+                : `<button class="paper-bot-close-trade" type="button" data-paper-bot-close-trade="${escapeHtml(position.ticker)}">Close trade</button>`;
             row.innerHTML = `
               <td>
                 <button class="paper-bot-ticker-button" type="button" data-paper-bot-select-ticker="${escapeHtml(position.ticker)}">
@@ -6515,7 +6537,7 @@ function renderPaperBotPanel(company = null, johnView = null, maxView = null, de
                 <strong>${formatMoney(position.marketValue)}</strong>
                 <small>${formatSignedMoney(position.unrealizedPnl)} | ${formatPercent(position.unrealizedPct)}</small>
               </td>
-              <td><button class="paper-bot-close-trade" type="button" data-paper-bot-close-trade="${escapeHtml(position.ticker)}">Close trade</button></td>
+              <td>${actionMarkup}</td>
             `;
             return row;
           })
@@ -6541,6 +6563,10 @@ function selectPaperBotPositionTicker(ticker) {
 }
 
 function openPaperBotCloseConfirm(ticker) {
+  if (paperBotState.mode === "max_autonomous_cloud") {
+    setPaperBotLiveStatus("Desktop and mobile now use the same cloud ledger. Manual closes must be handled by Max's cloud run to stay synced.", "warning");
+    return;
+  }
   const normalizedTicker = getPaperBotTicker(ticker);
   const position = paperBotState.positions?.[normalizedTicker];
   if (!paperBotCloseConfirmModal || !position) {
@@ -6573,6 +6599,12 @@ function closePaperBotCloseConfirm() {
 }
 
 function manuallyClosePaperBotTrade(ticker) {
+  if (paperBotState.mode === "max_autonomous_cloud") {
+    closePaperBotCloseConfirm();
+    setPaperBotLiveStatus("Manual close skipped because cloud mode is synced from the published Max ledger.", "warning");
+    renderPaperBotPanelForCurrentSelection();
+    return;
+  }
   const normalizedTicker = getPaperBotTicker(ticker);
   const position = paperBotState.positions?.[normalizedTicker];
   if (!position) {

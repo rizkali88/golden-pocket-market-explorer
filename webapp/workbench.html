@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golden Pocket Market Explorer - Working Draft</title>
-    <link rel="stylesheet" href="./styles.css?v=20260514-equity-chart" />
+    <link rel="stylesheet" href="./styles.css?v=20260515-portfolio-sync" />
   </head>
   <body class="workbench-page">
     <div class="app-shell">
@@ -102,48 +102,50 @@
             </div>
 
             <div class="paper-bot-overview">
-              <article class="paper-bot-card paper-bot-card--account">
-                <span>Account equity</span>
-                <strong id="paper-bot-equity">$10,000.00</strong>
-                <small id="paper-bot-return">0.00% total return</small>
-                <div class="paper-bot-metrics" id="paper-bot-metrics"></div>
-              </article>
-              <article class="paper-bot-card paper-bot-card--holdings-chart">
-                <div class="holdings-chart__header">
-                  <div>
-                    <span>Total equity</span>
-                    <strong id="paper-bot-holdings-value">$0.00</strong>
-                    <small id="paper-bot-holdings-return">$0.00 | 0.00%</small>
-                  </div>
-                  <div class="holdings-chart__ranges" id="paper-bot-holdings-ranges" aria-label="Holdings chart range"></div>
+              <article class="paper-bot-card paper-bot-card--portfolio">
+                <div class="paper-bot-portfolio__summary">
+                  <span>Account equity</span>
+                  <strong id="paper-bot-equity">$10,000.00</strong>
+                  <small id="paper-bot-return">0.00% total return</small>
+                  <div class="paper-bot-metrics" id="paper-bot-metrics"></div>
                 </div>
-                <div class="holdings-chart__canvas" id="paper-bot-holdings-chart-wrap">
-                  <div class="holdings-chart__axis holdings-chart__axis--y" aria-hidden="true">
-                    <span id="paper-bot-holdings-y-max">--</span>
-                    <span id="paper-bot-holdings-y-mid">--</span>
-                    <span id="paper-bot-holdings-y-min">--</span>
+                <div class="paper-bot-portfolio__chart">
+                  <div class="holdings-chart__header">
+                    <div>
+                      <span>Equity curve</span>
+                      <strong id="paper-bot-holdings-value" hidden>$0.00</strong>
+                      <small id="paper-bot-holdings-return">$0.00 | 0.00%</small>
+                    </div>
+                    <div class="holdings-chart__ranges" id="paper-bot-holdings-ranges" aria-label="Holdings chart range"></div>
                   </div>
-                  <svg id="paper-bot-holdings-chart" viewBox="0 0 1000 260" role="img" aria-label="Paper account equity chart" preserveAspectRatio="none">
-                    <defs>
-                      <linearGradient id="holdings-chart-fill-gradient" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0%" stop-color="currentColor" stop-opacity="0.26" />
-                        <stop offset="100%" stop-color="currentColor" stop-opacity="0" />
-                      </linearGradient>
-                    </defs>
-                    <line class="holdings-chart__grid" x1="70" x2="950" y1="54" y2="54"></line>
-                    <line class="holdings-chart__grid" x1="70" x2="950" y1="130" y2="130"></line>
-                    <line class="holdings-chart__grid" x1="70" x2="950" y1="206" y2="206"></line>
-                    <path class="holdings-chart__fill" id="paper-bot-holdings-fill"></path>
-                    <path class="holdings-chart__line" id="paper-bot-holdings-path"></path>
-                    <line class="holdings-chart__hover-line" id="paper-bot-holdings-hover-line" y1="38" y2="214" hidden></line>
-                    <circle class="holdings-chart__hover-dot" id="paper-bot-holdings-hover-dot" r="7" hidden></circle>
-                    <circle class="holdings-chart__last-dot" id="paper-bot-holdings-dot" r="4"></circle>
-                  </svg>
-                  <div class="holdings-chart__tooltip" id="paper-bot-holdings-tooltip" hidden></div>
-                  <p class="holdings-chart__empty" id="paper-bot-holdings-empty" hidden>No open holdings to chart yet.</p>
-                  <div class="holdings-chart__axis holdings-chart__axis--x" aria-hidden="true">
-                    <span id="paper-bot-holdings-x-start">--</span>
-                    <span id="paper-bot-holdings-x-end">--</span>
+                  <div class="holdings-chart__canvas" id="paper-bot-holdings-chart-wrap">
+                    <div class="holdings-chart__axis holdings-chart__axis--y" aria-hidden="true">
+                      <span id="paper-bot-holdings-y-max">--</span>
+                      <span id="paper-bot-holdings-y-mid">--</span>
+                      <span id="paper-bot-holdings-y-min">--</span>
+                    </div>
+                    <svg id="paper-bot-holdings-chart" viewBox="0 0 1600 360" role="img" aria-label="Paper account equity chart" preserveAspectRatio="none">
+                      <defs>
+                        <linearGradient id="holdings-chart-fill-gradient" x1="0" x2="0" y1="0" y2="1">
+                          <stop offset="0%" stop-color="currentColor" stop-opacity="0.26" />
+                          <stop offset="100%" stop-color="currentColor" stop-opacity="0" />
+                        </linearGradient>
+                      </defs>
+                      <line class="holdings-chart__grid" x1="92" x2="1515" y1="70" y2="70"></line>
+                      <line class="holdings-chart__grid" x1="92" x2="1515" y1="178" y2="178"></line>
+                      <line class="holdings-chart__grid" x1="92" x2="1515" y1="286" y2="286"></line>
+                      <path class="holdings-chart__fill" id="paper-bot-holdings-fill"></path>
+                      <path class="holdings-chart__line" id="paper-bot-holdings-path"></path>
+                      <line class="holdings-chart__hover-line" id="paper-bot-holdings-hover-line" y1="48" y2="300" hidden></line>
+                      <circle class="holdings-chart__hover-dot" id="paper-bot-holdings-hover-dot" r="8" hidden></circle>
+                      <circle class="holdings-chart__last-dot" id="paper-bot-holdings-dot" r="5"></circle>
+                    </svg>
+                    <div class="holdings-chart__tooltip" id="paper-bot-holdings-tooltip" hidden></div>
+                    <p class="holdings-chart__empty" id="paper-bot-holdings-empty" hidden>No equity history to chart yet.</p>
+                    <div class="holdings-chart__axis holdings-chart__axis--x" aria-hidden="true">
+                      <span id="paper-bot-holdings-x-start">--</span>
+                      <span id="paper-bot-holdings-x-end">--</span>
+                    </div>
                   </div>
                 </div>
               </article>
@@ -155,7 +157,7 @@
                   <span>Open paper positions</span>
                   <small id="paper-bot-position-count">0 open</small>
                 </div>
-                <div class="paper-bot-table-wrap">
+                <div class="paper-bot-table-wrap paper-bot-table-wrap--positions">
                   <table class="paper-bot-table">
                     <thead>
                       <tr>
@@ -582,13 +584,13 @@
             const max = Math.max(...values);
             const range = Math.max(max - min, Math.max(endValue, 1) * 0.02);
             const points = values.map((value, index) => {
-              const x = 70 + (index / Math.max(values.length - 1, 1)) * 880;
-              const y = 214 - ((value - min) / range) * 176;
+              const x = 92 + (index / Math.max(values.length - 1, 1)) * 1423;
+              const y = 300 - ((value - min) / range) * 252;
               return [x, y];
             });
             const d = points.reduce((path, point, index) => `${path}${index ? " L" : "M"}${point[0].toFixed(2)} ${point[1].toFixed(2)}`, "");
             holdingsPath.setAttribute("d", d);
-            holdingsFill.setAttribute("d", `${d} L950 214 L70 214 Z`);
+            holdingsFill.setAttribute("d", `${d} L1515 300 L92 300 Z`);
             holdingsDot.setAttribute("cx", points.at(-1)[0].toFixed(2));
             holdingsDot.setAttribute("cy", points.at(-1)[1].toFixed(2));
             holdingsChart.parentElement.dataset.tone = returnPct >= 0 ? "positive" : "negative";
@@ -664,7 +666,7 @@
                       <strong>${formatMoney(position.marketValue)}</strong>
                       <small>${formatSignedMoney(position.unrealizedPnl)} | ${formatPercent(position.unrealizedPct)}</small>
                     </td>
-                    <td><button class="paper-bot-close-trade" type="button" data-paper-bot-close-trade="${escapeHtml(position.ticker)}">Close trade</button></td>
+                    <td><span class="paper-bot-cloud-sync">Cloud synced</span></td>
                   `;
                   return row;
                 })
@@ -679,7 +681,7 @@
 
     <script>
       (() => {
-        const cacheVersion = "20260514-equity-chart";
+        const cacheVersion = "20260515-portfolio-sync";
         const liveStateVersion = String(Date.now());
         const dependencyScripts = [
           "./data/market_universe.js",
