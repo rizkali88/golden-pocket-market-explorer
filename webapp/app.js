@@ -5174,13 +5174,14 @@ function makeReturnBar({ label, value }) {
 }
 
 function buildConvictionBar(label, value, detail) {
+  const detailText = detail ? `${Math.round(value)}% - ${detail}` : `${Math.round(value)}%`;
   return `
     <div class="conviction-bar">
       <span class="conviction-bar__label">${label}</span>
       <div class="opportunity-table__conviction-track">
         <i class="opportunity-table__conviction-fill" style="width:${clampNumber(value, 0, 100)}%"></i>
       </div>
-      <span class="conviction-bar__value">${Math.round(value)}%${detail ? ` - ${detail}` : ""}</span>
+      <span class="conviction-bar__value" title="${escapeHtml(detailText)}">${Math.round(value)}%</span>
     </div>
   `;
 }

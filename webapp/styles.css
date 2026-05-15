@@ -2428,7 +2428,7 @@ html:not([data-theme="dark"]) .opportunity-table thead th {
 }
 
 .opportunity-table__bot-badge {
-  display: inline-flex;
+  display: flex;
   width: max-content;
   max-width: 100%;
   align-items: center;
@@ -2442,6 +2442,9 @@ html:not([data-theme="dark"]) .opportunity-table thead th {
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .opportunity-table__bot-badge--hold,
@@ -2464,10 +2467,14 @@ html:not([data-theme="dark"]) .opportunity-table thead th {
 }
 
 .opportunity-table__bot-note {
+  display: -webkit-box;
+  overflow: hidden;
   color: var(--muted);
   font-size: 0.72rem;
   font-weight: 750;
   line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .opportunity-table__conviction {
@@ -2520,7 +2527,7 @@ html:not([data-theme="dark"]) .opportunity-table thead th {
 }
 
 .market-workspace .opportunity-table {
-  min-width: 0;
+  min-width: 900px;
   table-layout: fixed;
 }
 
@@ -2530,22 +2537,28 @@ html:not([data-theme="dark"]) .opportunity-table thead th {
 
 .market-workspace .opportunity-table th:nth-child(1),
 .market-workspace .opportunity-table td:nth-child(1) {
-  width: 34%;
+  width: 32%;
 }
 
 .market-workspace .opportunity-table th:nth-child(2),
 .market-workspace .opportunity-table td:nth-child(2) {
-  width: 14%;
+  width: 12%;
 }
 
 .market-workspace .opportunity-table th:nth-child(3),
 .market-workspace .opportunity-table td:nth-child(3) {
-  width: 22%;
+  width: 34%;
 }
 
 .market-workspace .opportunity-table th:nth-child(4),
 .market-workspace .opportunity-table td:nth-child(4) {
-  width: 30%;
+  width: 22%;
+}
+
+.market-workspace .opportunity-table__bot-badge {
+  width: 100%;
+  justify-content: flex-start;
+  box-sizing: border-box;
 }
 
 .market-workspace .opportunity-table__conviction {
@@ -2553,8 +2566,8 @@ html:not([data-theme="dark"]) .opportunity-table thead th {
 }
 
 .market-workspace .conviction-bar {
-  grid-template-columns: 62px minmax(42px, 1fr) 80px;
-  gap: 8px;
+  grid-template-columns: 70px minmax(48px, 1fr) 42px;
+  gap: 7px;
 }
 
 .market-workspace .conviction-bar__label,
@@ -2565,6 +2578,7 @@ html:not([data-theme="dark"]) .opportunity-table thead th {
 .market-workspace .conviction-bar__value {
   overflow: hidden;
   text-overflow: ellipsis;
+  text-align: right;
 }
 
 .detail-card {
