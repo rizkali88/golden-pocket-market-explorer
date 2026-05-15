@@ -195,7 +195,7 @@ To enable it:
 4. Paste the returned namespace id into `integrations/wrangler.paper-bot-sync.toml`.
 5. Set `PAPER_BOT_SYNC_TOKEN` as a Worker secret with `npx.cmd wrangler secret put PAPER_BOT_SYNC_TOKEN --config integrations/wrangler.paper-bot-sync.toml`, then use the same value as the local device sync key in the webapp.
 6. Deploy the worker: `npx.cmd wrangler deploy --config integrations/wrangler.paper-bot-sync.toml`.
-7. Confirm `https://your-worker.workers.dev/paper-bot/health` returns `ok: true`.
+7. Confirm `https://golden-pocket-paper-bot-sync.golden-pocket-lab.workers.dev/paper-bot/health` returns `ok: true`.
 8. Set `paperBotSyncBaseUrl` in `webapp/data/live_config.js` to the worker base URL.
 9. In GitHub Actions, add repository secrets named `MAX_PAPER_SYNC_BASE_URL` and `MAX_PAPER_SYNC_TOKEN`.
 

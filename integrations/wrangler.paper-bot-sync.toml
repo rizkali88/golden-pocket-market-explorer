@@ -1,0 +1,12 @@
+name = "golden-pocket-paper-bot-sync"
+main = "fmp-live-proxy-worker.js"
+compatibility_date = "2026-05-15"
+workers_dev = true
+account_id = "4d897d0aca1b0bc11948a43475d0f0f9"
+
+[vars]
+PAPER_BOT_STATE_URL = "https://rizkali88.github.io/golden-pocket-market-explorer/data/max_bot_state.js"
+
+[[kv_namespaces]]
+binding = "PAPER_BOT_SYNC"
+id = "b3f2618e395e4ae2811cdd74067f94e1"
