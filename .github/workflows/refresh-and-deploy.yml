@@ -80,7 +80,7 @@ jobs:
       - name: Run Max autonomous paper bot
         env:
           FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
-          MAX_PAPER_SYNC_BASE_URL: ${{ secrets.MAX_PAPER_SYNC_BASE_URL }}
+          MAX_PAPER_SYNC_BASE_URL: ${{ secrets.MAX_PAPER_SYNC_BASE_URL || 'https://golden-pocket-paper-bot-sync.golden-pocket-lab.workers.dev' }}
           MAX_PAPER_SYNC_TOKEN: ${{ secrets.MAX_PAPER_SYNC_TOKEN }}
         run: |
           python build_max_paper_bot.py \
