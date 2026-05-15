@@ -5614,6 +5614,16 @@ function savePaperBotOverrides(overrides) {
   window.localStorage.setItem(PAPER_BOT_OVERRIDE_STORAGE_KEY, JSON.stringify(overrides));
 }
 
+function clearPaperBotManualOverrides() {
+  try {
+    if (window.localStorage.getItem(PAPER_BOT_OVERRIDE_STORAGE_KEY) !== null) {
+      window.localStorage.removeItem(PAPER_BOT_OVERRIDE_STORAGE_KEY);
+    }
+  } catch (error) {
+    // Ignore storage failures; the next cloud state refresh remains authoritative.
+  }
+}
+
 function rememberPaperBotManualClose(trade) {
   const overrides = loadPaperBotOverrides();
   const tradeId = String(trade?.id ?? "");
@@ -5686,6 +5696,15 @@ function applyPaperBotManualOverrides(state) {
   return nextState;
 }
 
+function applyPaperBotCloudState(state) {
+  if (!hasPaperBotCloudSync()) {
+    clearPaperBotManualOverrides();
+    return state;
+  }
+  pruneSyncedPaperBotManualCloses(state);
+  return applyPaperBotManualOverrides(state);
+}
+
 function normalizePaperBotState(rawState) {
   if (!rawState || typeof rawState !== "object") {
     return null;
@@ -5747,8 +5766,7 @@ function pruneSyncedPaperBotManualCloses(state) {
 function loadPaperBotState() {
   const cloudState = normalizePaperBotState(window.GOLDEN_POCKET_MAX_BOT);
   if (cloudState?.mode === "max_autonomous_cloud") {
-    pruneSyncedPaperBotManualCloses(cloudState);
-    return applyPaperBotManualOverrides(cloudState);
+    return applyPaperBotCloudState(cloudState);
   }
   try {
     const parsed = JSON.parse(window.localStorage.getItem(PAPER_BOT_STORAGE_KEY) ?? "null");
@@ -5801,8 +5819,7 @@ async function refreshPaperBotCloudState(options = {}) {
     if (!nextState || nextState.mode !== "max_autonomous_cloud") {
       return;
     }
-    pruneSyncedPaperBotManualCloses(nextState);
-    paperBotState = applyPaperBotManualOverrides(nextState);
+    paperBotState = applyPaperBotCloudState(nextState);
     paperBotMarkPriceCache.clear();
     if (
       options.immediate ||
@@ -6632,13 +6649,21 @@ function openPaperBotCloseConfirm(ticker) {
   if (!paperBotCloseConfirmModal || !position) {
     return;
   }
+  if (paperBotState.mode === "max_autonomous_cloud" && !hasPaperBotCloudSync()) {
+    clearPaperBotManualOverrides();
+    setPaperBotLiveStatus(
+      `Cannot close ${normalizedTicker} from this browser yet. Add paper-bot sync in live_config.js so desktop and mobile share the same close request.`,
+      "warning",
+    );
+    return;
+  }
   pendingPaperBotCloseTicker = normalizedTicker;
   const markPrice = getPaperBotMarkPrice(position, companyUniverseByTicker.get(normalizedTicker));
   const shares = Number(position.shares ?? 0);
   const value = shares * markPrice;
   if (paperBotCloseConfirmMessage) {
     paperBotCloseConfirmMessage.textContent = paperBotState.mode === "max_autonomous_cloud"
-      ? `Are you sure you want to close ${normalizedTicker} at the current mark of ${formatMoney(markPrice)} for an estimated ${formatMoney(value)} trade value? This closes the trade now and then syncs it to the shared cloud ledger when the sync endpoint is available.`
+      ? `Are you sure you want to close ${normalizedTicker} at the current mark of ${formatMoney(markPrice)} for an estimated ${formatMoney(value)} trade value? This will send the close to the shared cloud ledger before this browser removes the position.`
       : `Are you sure you want to manually close ${normalizedTicker} at the current mark of ${formatMoney(markPrice)} for an estimated ${formatMoney(value)} trade value?`;
   }
   paperBotCloseConfirmModal.hidden = false;
@@ -6678,24 +6703,14 @@ async function submitPaperBotManualClose(trade) {
   );
 }
 
-async function manuallyClosePaperBotTrade(ticker) {
-  const normalizedTicker = getPaperBotTicker(ticker);
-  const position = paperBotState.positions?.[normalizedTicker];
-  if (!position) {
-    closePaperBotCloseConfirm();
-    renderPaperBotPanelForCurrentSelection();
-    return;
-  }
-  const company = companyUniverseByTicker.get(normalizedTicker);
-  const price = getPaperBotMarkPrice(position, company);
+function buildPaperBotManualCloseTrade(position, normalizedTicker, price) {
   const shares = Number(position.shares ?? 0);
   const entryPrice = Number(position.entryPrice ?? price);
-  const value = shares * price;
-  const pnl = (price - entryPrice) * shares;
-  paperBotState.cash = roundPaperBotMoney(Number(paperBotState.cash ?? 0) + value);
-  paperBotState.realizedPnl = roundPaperBotMoney(Number(paperBotState.realizedPnl ?? 0) + pnl);
-  delete paperBotState.positions[normalizedTicker];
-  const recordedTrade = addPaperBotTrade({
+  const value = roundPaperBotMoney(shares * price);
+  const pnl = roundPaperBotMoney((price - entryPrice) * shares);
+  return {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    time: new Date().toISOString(),
     type: "SELL",
     ticker: normalizedTicker,
     shares,
@@ -6708,30 +6723,61 @@ async function manuallyClosePaperBotTrade(ticker) {
     manualOverride: true,
     openedAt: position.openedAt,
     reason: "Manual override: user closed this paper trade at the current mark.",
-  });
+  };
+}
+
+async function manuallyClosePaperBotTrade(ticker) {
+  const normalizedTicker = getPaperBotTicker(ticker);
+  const position = paperBotState.positions?.[normalizedTicker];
+  if (!position) {
+    closePaperBotCloseConfirm();
+    renderPaperBotPanelForCurrentSelection();
+    return;
+  }
+  const company = companyUniverseByTicker.get(normalizedTicker);
+  const price = getPaperBotMarkPrice(position, company);
+  const recordedTrade = buildPaperBotManualCloseTrade(position, normalizedTicker, price);
   const isCloudMode = paperBotState.mode === "max_autonomous_cloud";
   if (isCloudMode) {
-    rememberPaperBotManualClose(recordedTrade);
+    closePaperBotCloseConfirm();
+    if (!hasPaperBotCloudSync()) {
+      clearPaperBotManualOverrides();
+      renderPaperBotPanelForCurrentSelection();
+      setPaperBotLiveStatus(
+        `No close was saved for ${normalizedTicker}. Paper-bot cloud sync is not configured, so closing locally would put desktop and mobile out of sync.`,
+        "warning",
+      );
+      return;
+    }
+    setPaperBotLiveStatus(`Submitting ${normalizedTicker} close to Max's shared cloud ledger...`, "buy");
+    try {
+      await submitPaperBotManualClose(recordedTrade);
+      rememberPaperBotManualClose(recordedTrade);
+      await refreshPaperBotCloudState({ immediate: true, force: true });
+      renderPaperBotPanelForCurrentSelection();
+      setPaperBotLiveStatus(`${normalizedTicker} close synced to the shared cloud ledger.`, "buy");
+    } catch (error) {
+      clearPaperBotManualOverrides();
+      await refreshPaperBotCloudState({ immediate: true, force: true });
+      renderPaperBotPanelForCurrentSelection();
+      setPaperBotLiveStatus(
+        `No close was saved for ${normalizedTicker} because cloud sync did not confirm. Please try again once sync is reachable.`,
+        "warning",
+      );
+    }
+    return;
   }
+
+  paperBotState.cash = roundPaperBotMoney(Number(paperBotState.cash ?? 0) + Number(recordedTrade.value ?? 0));
+  paperBotState.realizedPnl = roundPaperBotMoney(
+    Number(paperBotState.realizedPnl ?? 0) + Number(recordedTrade.realizedPnl ?? recordedTrade.pnl ?? 0),
+  );
+  delete paperBotState.positions[normalizedTicker];
+  addPaperBotTrade(recordedTrade);
   savePaperBotState();
   closePaperBotCloseConfirm();
   renderPaperBotPanelForCurrentSelection();
   schedulePaperBotLiveRefresh();
-  if (!isCloudMode) {
-    return;
-  }
-  if (!hasPaperBotCloudSync()) {
-    setPaperBotLiveStatus("Trade closed on this device. Add paper-bot sync in live_config.js to share the close across desktop and mobile.", "warning");
-    return;
-  }
-  setPaperBotLiveStatus(`Closing ${normalizedTicker} and syncing it to Max's cloud ledger...`, "buy");
-  try {
-    await submitPaperBotManualClose(recordedTrade);
-    await refreshPaperBotCloudState({ immediate: true, force: true });
-    setPaperBotLiveStatus(`${normalizedTicker} close synced to the shared cloud ledger.`, "buy");
-  } catch (error) {
-    setPaperBotLiveStatus("Trade closed locally, but cloud sync did not confirm. The close will stay on this device until sync is available again.", "warning");
-  }
 }
 
 function resetPaperBot() {
