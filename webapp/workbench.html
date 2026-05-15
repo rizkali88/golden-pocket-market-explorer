@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golden Pocket Market Explorer - Working Draft</title>
-    <link rel="stylesheet" href="./styles.css?v=20260515-close-trade-return" />
+    <link rel="stylesheet" href="./styles.css?v=20260515-sync-guard" />
   </head>
   <body class="workbench-page">
     <div class="app-shell">
@@ -687,7 +687,7 @@
 
     <script>
       (() => {
-        const cacheVersion = "20260515-close-trade-return";
+        const cacheVersion = "20260515-sync-guard";
         const liveStateVersion = String(Date.now());
         const dependencyScripts = [
           "./data/market_universe.js",
