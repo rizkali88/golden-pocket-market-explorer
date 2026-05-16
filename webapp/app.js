@@ -1049,6 +1049,7 @@ const paperBotMetrics = document.querySelector("#paper-bot-metrics");
 const paperBotInstruction = document.querySelector("#paper-bot-instruction");
 const paperBotReason = document.querySelector("#paper-bot-reason");
 const paperBotSyncConnect = document.querySelector("#paper-bot-sync-connect");
+const paperBotSyncToggle = document.querySelector("#paper-bot-sync-toggle");
 const paperBotHoldingsValue = document.querySelector("#paper-bot-holdings-value");
 const paperBotHoldingsReturn = document.querySelector("#paper-bot-holdings-return");
 const paperBotHoldingsRanges = document.querySelector("#paper-bot-holdings-ranges");
@@ -1145,8 +1146,11 @@ const FMP_DIRECT_BASE_URL = "https://financialmodelingprep.com/stable";
 const FMP_LOCAL_KEY_STORAGE_KEY = "golden-pocket-fmp-api-key";
 const FMP_LIVE_ENABLED_STORAGE_KEY = "golden-pocket-fmp-live-enabled";
 const PAPER_BOT_SYNC_TOKEN_STORAGE_KEY = "golden-pocket-paper-bot-sync-token";
+const PAPER_BOT_SYNC_ENABLED_STORAGE_KEY = "golden-pocket-paper-bot-sync-enabled";
 let maxExecutionLiveEnabled =
   window.localStorage.getItem(FMP_LIVE_ENABLED_STORAGE_KEY) === "on";
+let paperBotSyncEnabled =
+  window.localStorage.getItem(PAPER_BOT_SYNC_ENABLED_STORAGE_KEY) !== "off";
 const PAPER_BOT_STORAGE_KEY = "golden-pocket-paper-bot-v1";
 const PAPER_BOT_OVERRIDE_STORAGE_KEY = "golden-pocket-paper-bot-overrides-v1";
 const PAPER_BOT_STARTING_CASH = 10000;
@@ -5788,8 +5792,12 @@ function getPaperBotSyncBaseUrl() {
   return String(maxExecutionLiveConfig.paperBotSyncBaseUrl || "").replace(/\/+$/, "");
 }
 
-function hasPaperBotCloudSync() {
+function hasPaperBotSyncEndpoint() {
   return Boolean(getPaperBotSyncBaseUrl());
+}
+
+function hasPaperBotCloudSync() {
+  return hasPaperBotSyncEndpoint() && paperBotSyncEnabled;
 }
 
 function getPaperBotSyncToken() {
@@ -5806,6 +5814,11 @@ function setPaperBotSyncToken(token) {
   } else {
     window.localStorage.removeItem(PAPER_BOT_SYNC_TOKEN_STORAGE_KEY);
   }
+}
+
+function setPaperBotSyncEnabled(enabled) {
+  paperBotSyncEnabled = Boolean(enabled);
+  window.localStorage.setItem(PAPER_BOT_SYNC_ENABLED_STORAGE_KEY, paperBotSyncEnabled ? "on" : "off");
 }
 
 function getPaperBotSyncHeaders(extraHeaders = {}) {
@@ -6321,16 +6334,26 @@ function setPaperBotLiveStatus(message, state = "idle") {
 }
 
 function updatePaperBotSyncConnectUi() {
-  if (!paperBotSyncConnect) {
-    return;
+  const hasEndpoint = hasPaperBotSyncEndpoint();
+  if (paperBotSyncConnect) {
+    paperBotSyncConnect.hidden = !hasEndpoint;
+    const hasToken = Boolean(getPaperBotSyncToken());
+    paperBotSyncConnect.textContent = hasToken ? "Sync key set" : "Sync key";
+    paperBotSyncConnect.classList.toggle("is-active", hasToken);
+    paperBotSyncConnect.title = hasToken
+      ? "Update or clear the paper-bot cloud sync key stored on this device"
+      : "Add the paper-bot cloud sync key for this device";
   }
-  paperBotSyncConnect.hidden = !hasPaperBotCloudSync();
-  const hasToken = Boolean(getPaperBotSyncToken());
-  paperBotSyncConnect.textContent = hasToken ? "Sync key set" : "Sync key";
-  paperBotSyncConnect.classList.toggle("is-active", hasToken);
-  paperBotSyncConnect.title = hasToken
-    ? "Update or clear the paper-bot cloud sync key stored on this device"
-    : "Add the paper-bot cloud sync key for this device";
+  if (paperBotSyncToggle) {
+    paperBotSyncToggle.hidden = !hasEndpoint;
+    paperBotSyncToggle.textContent = paperBotSyncEnabled ? "Worker sync on" : "Worker sync off";
+    paperBotSyncToggle.setAttribute("aria-pressed", String(paperBotSyncEnabled));
+    paperBotSyncToggle.classList.toggle("is-active", paperBotSyncEnabled);
+    paperBotSyncToggle.classList.toggle("is-paused", !paperBotSyncEnabled);
+    paperBotSyncToggle.title = paperBotSyncEnabled
+      ? "Pause Cloudflare Worker sync on this device without clearing the sync key"
+      : "Resume Cloudflare Worker sync on this device";
+  }
 }
 
 function connectPaperBotSyncToken() {
@@ -6346,7 +6369,21 @@ function connectPaperBotSyncToken() {
   updatePaperBotSyncConnectUi();
   if (hasPaperBotCloudSync()) {
     refreshPaperBotCloudState({ immediate: true, force: true });
+  } else if (hasPaperBotSyncEndpoint()) {
+    setPaperBotLiveStatus("Cloudflare Worker sync is paused on this device; static Max ledger remains visible.", "warning");
   }
+}
+
+function togglePaperBotWorkerSync() {
+  setPaperBotSyncEnabled(!paperBotSyncEnabled);
+  updatePaperBotSyncConnectUi();
+  if (paperBotSyncEnabled) {
+    setPaperBotLiveStatus("Cloudflare Worker sync is on; refreshing the shared Max ledger.", "loading");
+    refreshPaperBotCloudState({ immediate: true, force: true });
+    return;
+  }
+  setPaperBotLiveStatus("Cloudflare Worker sync is off on this device; static Max ledger remains visible.", "warning");
+  refreshPaperBotCloudState({ immediate: true, force: true });
 }
 
 const paperBotEtFormatter = new Intl.DateTimeFormat("en-US", {
@@ -6530,8 +6567,11 @@ function getPaperBotCloseBlockMessage(ticker = "") {
   if (!marketStatus.isOpen) {
     reasons.push(`${marketStatus.label}. ${marketStatus.detail}.`);
   }
-  if (paperBotState.mode === "max_autonomous_cloud" && !hasPaperBotCloudSync()) {
+  if (paperBotState.mode === "max_autonomous_cloud" && !hasPaperBotSyncEndpoint()) {
     reasons.push("Paper-bot cloud sync is not configured yet.");
+  }
+  if (paperBotState.mode === "max_autonomous_cloud" && hasPaperBotSyncEndpoint() && !paperBotSyncEnabled) {
+    reasons.push("Cloudflare Worker sync is paused on this device.");
   }
   if (paperBotState.mode === "max_autonomous_cloud" && hasPaperBotCloudSync() && !getPaperBotSyncToken()) {
     reasons.push("Enter the paper-bot Sync key on this device.");
@@ -7017,8 +7057,8 @@ function closePaperBotCloseConfirm() {
 
 async function submitPaperBotManualClose(trade) {
   const syncUrl = buildPaperBotSyncUrl("/paper-bot/close");
-  if (!syncUrl) {
-    throw new Error("No paper bot sync endpoint configured.");
+  if (!syncUrl || !hasPaperBotCloudSync()) {
+    throw new Error("Cloudflare Worker sync is paused or unavailable.");
   }
   return fetchJsonRequest(
     syncUrl,
@@ -7085,7 +7125,7 @@ async function manuallyClosePaperBotTrade(ticker) {
       clearPaperBotManualOverrides();
       renderPaperBotPanelForCurrentSelection();
       setPaperBotLiveStatus(
-        `No close was saved for ${normalizedTicker}. Paper-bot cloud sync is not configured, so closing locally would put desktop and mobile out of sync.`,
+        `No close was saved for ${normalizedTicker}. Cloudflare Worker sync is not available on this device, so closing locally would put desktop and mobile out of sync.`,
         "warning",
       );
       return;
@@ -7619,7 +7659,7 @@ function buildLayoutLegend() {
   title.className = "layout-legend__title";
   title.innerHTML = `
     <strong>Layout Mode</strong>
-    <p>Use the badges in your feedback, or click a number below to jump.</p>
+    <p>Use the section number plus HTML tag in your feedback, or click a row below to jump.</p>
   `;
 
   const list = document.createElement("div");
@@ -7628,7 +7668,12 @@ function buildLayoutLegend() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "layout-legend__item";
-    button.innerHTML = `<strong>${section.dataset.layoutId}. ${section.dataset.layoutLabel}</strong>`;
+    const htmlTag = section.dataset.htmlTag ? `&lt;${section.dataset.htmlTag}&gt;` : "layout block";
+    const htmlHeading = section.dataset.htmlHeading ? ` · ${section.dataset.htmlHeading}` : "";
+    button.innerHTML = `
+      <strong>${section.dataset.layoutId}. ${section.dataset.layoutLabel}</strong>
+      <span>${htmlTag}${htmlHeading}</span>
+    `;
     button.addEventListener("click", () => {
       section.scrollIntoView({ behavior: "smooth", block: "start" });
       flashLayoutTarget(section);
@@ -7810,6 +7855,10 @@ if (paperBotTransactionsOpen) {
 
 if (paperBotSyncConnect) {
   paperBotSyncConnect.addEventListener("click", connectPaperBotSyncToken);
+}
+
+if (paperBotSyncToggle) {
+  paperBotSyncToggle.addEventListener("click", togglePaperBotWorkerSync);
 }
 
 if (paperBotTransactionsClose) {

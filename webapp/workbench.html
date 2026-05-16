@@ -5,12 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golden Pocket Market Explorer - Non Production</title>
     <meta name="robots" content="noindex, nofollow" />
-    <link rel="stylesheet" href="./workbench.styles.css?v=20260515-mobile-tabs" />
+    <link rel="stylesheet" href="./workbench.styles.css?v=20260516-worker-sync-toggle" />
   </head>
   <body class="workbench-page">
-    <div class="app-shell">
-      <aside class="sidebar panel panel--glass" data-layout-id="1" data-layout-label="Toolbar">
-        <div class="sidebar__brand">
+    <div class="app-shell" data-html-tag="div" data-html-role="Application shell">
+      <aside class="sidebar panel panel--glass" data-layout-id="1" data-layout-label="Toolbar" data-html-tag="aside" data-html-role="Global toolbar">
+        <header class="sidebar__brand" data-html-tag="header" data-html-heading="h1">
+          <h1 class="visually-hidden">Golden Pocket Lab Non Production Dashboard</h1>
           <div class="brand">
             <div class="brand__mark" role="img" aria-label="Golden Pocket Lab icon">
               GP
@@ -21,9 +22,9 @@
             </div>
           </div>
           <span class="status-pill" id="universe-status">Market universe loading</span>
-        </div>
+        </header>
 
-        <div class="sidebar__filters">
+        <nav class="sidebar__filters" aria-label="Market filters" data-html-tag="nav" data-html-role="Filter navigation">
           <div class="sidebar__filter-stack">
             <label class="filter-field">
               <span>Sector</span>
@@ -58,9 +59,9 @@
             </label>
             <button id="clear-filters" class="filter-button" type="button">Clear filters</button>
           </div>
-        </div>
+        </nav>
 
-        <div class="sidebar__actions">
+        <nav class="sidebar__actions" aria-label="Workspace actions" data-html-tag="nav" data-html-role="Workspace actions">
           <a class="workspace-link workspace-link--fred" href="./fred.html">Fred Options</a>
           <button class="layout-toggle" id="layout-toggle" type="button" aria-pressed="false">Layout mode</button>
           <button class="theme-toggle theme-toggle--compact" id="theme-toggle" type="button" aria-pressed="false" aria-label="Toggle color theme">
@@ -77,13 +78,13 @@
               </svg>
             </span>
           </button>
-        </div>
+        </nav>
       </aside>
 
       <div class="report-shell">
-        <main class="dashboard">
-          <section class="panel reveal paper-bot-panel" id="paper-bot-panel" data-layout-id="5.7" data-layout-label="Paper Trading Bot">
-            <div class="paper-bot-panel__header">
+        <main class="dashboard" data-html-tag="main" data-html-role="Primary dashboard content">
+          <section class="panel reveal paper-bot-panel" id="paper-bot-panel" data-layout-id="5.7" data-layout-label="Paper Trading Bot" data-html-tag="section" data-html-heading="h2">
+            <header class="paper-bot-panel__header" data-html-tag="header">
               <div>
                 <p class="eyebrow">Paper Trading Bot</p>
                 <h2>$10,000 dummy account run by Max Technical</h2>
@@ -98,14 +99,15 @@
                   <span id="paper-bot-transactions-count">0</span>
                 </button>
                 <button type="button" class="paper-bot-button paper-bot-button--ghost" id="paper-bot-sync-connect" hidden>Sync key</button>
+                <button type="button" class="paper-bot-button paper-bot-button--ghost" id="paper-bot-sync-toggle" aria-pressed="true" hidden>Worker sync on</button>
                 <button type="button" class="paper-bot-button" id="paper-bot-auto-toggle" aria-pressed="true" hidden>Max cloud: On</button>
                 <button type="button" class="paper-bot-button" id="paper-bot-evaluate" hidden>Manual evaluate</button>
                 <button type="button" class="paper-bot-button paper-bot-button--ghost" id="paper-bot-reset" hidden>Reset local $10k</button>
               </div>
-            </div>
+            </header>
 
             <div class="paper-bot-overview">
-              <article class="paper-bot-card paper-bot-card--portfolio">
+              <article class="paper-bot-card paper-bot-card--portfolio" data-html-tag="article" data-html-heading="h3">
                 <div class="paper-bot-portfolio__summary">
                   <span>Account equity</span>
                   <strong id="paper-bot-equity">$10,000.00</strong>
@@ -161,13 +163,13 @@
             </div>
 
             <div class="paper-bot-data-grid">
-              <article class="paper-bot-table-card">
-                <div class="paper-bot-table-card__header">
+              <article class="paper-bot-table-card" data-html-tag="article" data-html-heading="h3">
+                <header class="paper-bot-table-card__header" data-html-tag="header">
                   <span>Open paper positions</span>
                   <small id="paper-bot-position-count">0 open</small>
-                </div>
+                </header>
                 <div class="paper-bot-table-wrap paper-bot-table-wrap--positions">
-                  <table class="paper-bot-table">
+                  <table class="paper-bot-table" data-html-tag="table" aria-label="Open paper positions">
                     <thead>
                       <tr>
                         <th>Ticker</th>
@@ -184,18 +186,18 @@
             </div>
           </section>
 
-          <div class="market-workspace">
-            <section class="panel reveal opportunity-panel" data-layout-id="7" data-layout-label="Opportunity Table">
-              <div class="opportunity-panel__header">
+          <div class="market-workspace" data-html-tag="div" data-html-role="Split market workspace">
+            <section class="panel reveal opportunity-panel" data-layout-id="7" data-layout-label="Opportunity Table" data-html-tag="section" data-html-heading="h2">
+              <header class="opportunity-panel__header" data-html-tag="header">
                 <div>
                   <p class="eyebrow">Opportunity Table</p>
                   <h2 id="roster-title">Buy candidates</h2>
                   <p id="roster-note">Showing companies with a Buy final call by default.</p>
                 </div>
                 <strong class="opportunity-panel__count" id="company-count">Loading companies</strong>
-              </div>
+              </header>
               <div class="opportunity-table-wrap">
-                <table class="opportunity-table">
+                <table class="opportunity-table" data-html-tag="table" aria-label="Opportunity table">
                   <thead>
                     <tr>
                       <th>Company</th>
@@ -213,8 +215,8 @@
               </div>
             </section>
 
-            <section class="panel reveal max-execution-panel" data-layout-id="8.5" data-layout-label="Max Execution Chart">
-              <div class="max-execution-panel__header">
+            <section class="panel reveal max-execution-panel" data-layout-id="8.5" data-layout-label="Max Execution Chart" data-html-tag="section" data-html-heading="h2">
+              <header class="max-execution-panel__header" data-html-tag="header">
                 <div>
                   <p class="eyebrow">Max Execution Chart</p>
                   <h2 id="max-execution-title">Select a ticker to map entry, stop, and targets</h2>
@@ -246,7 +248,7 @@
                     <div class="max-execution-range-switcher" id="max-execution-drawing-switcher" aria-label="Max technical drawing overlays"></div>
                   </div>
                 </div>
-              </div>
+              </header>
               <div class="max-execution-layout">
                 <div class="max-execution-chart-shell" id="max-execution-chart-host" aria-live="polite"></div>
                 <aside class="max-execution-sidecar">
@@ -264,21 +266,21 @@
             </section>
           </div>
 
-          <section class="panel reveal agent-dashboard-panel" id="agent-dashboard-panel" data-layout-id="5.5" data-layout-label="Fundamental and Technical Dashboards">
-            <div class="section-heading">
+          <section class="panel reveal agent-dashboard-panel" id="agent-dashboard-panel" data-layout-id="5.5" data-layout-label="Fundamental and Technical Dashboards" data-html-tag="section" data-html-heading="h2">
+            <header class="section-heading" data-html-tag="header">
               <p class="eyebrow">Decision Dashboards</p>
               <h2>The Fundamental and Technical dashboards behind each Trading Decision</h2>
-            </div>
+            </header>
 
             <div class="agent-dashboard-grid">
-              <article class="agent-dashboard-card agent-dashboard-card--john">
-                <div class="agent-dashboard-card__header">
+              <article class="agent-dashboard-card agent-dashboard-card--john" data-html-tag="article" data-html-heading="h3">
+                <header class="agent-dashboard-card__header" data-html-tag="header">
                   <div>
                     <p class="eyebrow">Fundamental Dashboard</p>
                     <h3>Fundamental Investment Memo</h3>
                   </div>
                   <span class="decision-badge" id="john-verdict">Awaiting ticker</span>
-                </div>
+                </header>
                 <div class="agent-input-pack">
                   <div class="agent-pack-title">
                     <span>What Fundamental is reading</span>
@@ -289,7 +291,7 @@
                 </div>
                 <div class="agent-score-bars" id="john-score-bars"></div>
                 <div class="agent-table-wrap">
-                  <table class="agent-metric-table">
+                  <table class="agent-metric-table" data-html-tag="table" aria-label="Fundamental dashboard KPI table">
                     <thead>
                       <tr>
                         <th>Institutional KPI</th>
@@ -302,14 +304,14 @@
                 </div>
               </article>
 
-              <article class="agent-dashboard-card agent-dashboard-card--max">
-                <div class="agent-dashboard-card__header">
+              <article class="agent-dashboard-card agent-dashboard-card--max" data-html-tag="article" data-html-heading="h3">
+                <header class="agent-dashboard-card__header" data-html-tag="header">
                   <div>
                     <p class="eyebrow">Technical Dashboard</p>
                     <h3>Technical Execution Board</h3>
                   </div>
                   <span class="decision-badge" id="max-verdict">Awaiting ticker</span>
-                </div>
+                </header>
                 <div class="agent-input-pack">
                   <div class="agent-pack-title">
                     <span>What Technical is reading</span>
@@ -321,7 +323,7 @@
                 <div class="agent-score-bars" id="max-score-bars"></div>
                 <div class="price-ladder" id="max-price-ladder"></div>
                 <div class="agent-table-wrap">
-                  <table class="agent-metric-table">
+                  <table class="agent-metric-table" data-html-tag="table" aria-label="Technical execution levels table">
                     <thead>
                       <tr>
                         <th>Execution Level</th>
@@ -335,7 +337,7 @@
               </article>
             </div>
 
-            <article class="trading-decision-card" id="trading-decision-card">
+            <article class="trading-decision-card" id="trading-decision-card" data-html-tag="article" data-html-heading="h3">
               <div>
                 <p class="eyebrow">Combined Output</p>
                 <h3>Trading Decision</h3>
@@ -345,22 +347,22 @@
             </article>
           </section>
 
-          <section class="panel reveal chart-panel chart-panel--wide" data-layout-id="8" data-layout-label="TradingView Chart">
-            <div class="section-heading section-heading--tight">
+          <section class="panel reveal chart-panel chart-panel--wide" data-layout-id="8" data-layout-label="TradingView Chart" data-html-tag="section" data-html-heading="h2">
+            <header class="section-heading section-heading--tight" data-html-tag="header">
               <p class="eyebrow">TradingView Chart</p>
               <h2 id="tradingview-chart-title">Full-width market chart</h2>
               <p class="chart-panel__subtitle" id="tradingview-chart-subtitle">
                 Select a ticker from the table or toolbar to load the interactive TradingView chart.
               </p>
-            </div>
+            </header>
             <div class="tradingview-chart-shell" id="tradingview-chart-host" aria-live="polite"></div>
           </section>
 
-        <section class="panel panel--sources reveal" data-layout-id="13" data-layout-label="Sources">
-          <div class="section-heading">
+        <section class="panel panel--sources reveal" data-layout-id="13" data-layout-label="Sources" data-html-tag="section" data-html-heading="h2">
+          <header class="section-heading" data-html-tag="header">
             <p class="eyebrow">Sources</p>
             <h2>Linked research inputs</h2>
-          </div>
+          </header>
           <ul class="source-list">
             <li><a href="https://www.sec.gov/files/company_tickers_exchange.json" target="_blank" rel="noreferrer">SEC company_tickers_exchange.json</a></li>
             <li><a href="https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data" target="_blank" rel="noreferrer">SEC EDGAR Data Access Guidance</a></li>
@@ -380,16 +382,16 @@
 
     <aside class="layout-legend" id="layout-legend" hidden aria-live="polite"></aside>
 
-    <div class="paper-bot-modal paper-bot-confirm-modal" id="paper-bot-close-confirm-modal" hidden aria-hidden="true">
+    <div class="paper-bot-modal paper-bot-confirm-modal" id="paper-bot-close-confirm-modal" hidden aria-hidden="true" data-html-tag="dialog" data-html-role="Manual close confirmation dialog">
       <div class="paper-bot-modal__backdrop" data-paper-bot-close-confirm-cancel></div>
       <section class="paper-bot-modal__dialog paper-bot-confirm-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="paper-bot-close-confirm-title">
-        <div class="paper-bot-modal__header">
+        <header class="paper-bot-modal__header" data-html-tag="header">
           <div>
             <p class="eyebrow">Manual Override</p>
             <h2 id="paper-bot-close-confirm-title">Close paper trade?</h2>
             <p id="paper-bot-close-confirm-message">Are you sure you want to close this open paper trade?</p>
           </div>
-        </div>
+        </header>
         <div class="paper-bot-confirm-modal__actions">
           <button type="button" class="paper-bot-button paper-bot-button--danger" id="paper-bot-close-confirm-ok">OK</button>
           <button type="button" class="paper-bot-button paper-bot-button--ghost" id="paper-bot-close-confirm-cancel">Cancel</button>
@@ -397,19 +399,19 @@
       </section>
     </div>
 
-    <div class="paper-bot-modal" id="paper-bot-transactions-modal" hidden aria-hidden="true">
+    <div class="paper-bot-modal" id="paper-bot-transactions-modal" hidden aria-hidden="true" data-html-tag="dialog" data-html-role="Transaction history dialog">
       <div class="paper-bot-modal__backdrop" data-paper-bot-modal-close></div>
       <section class="paper-bot-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="paper-bot-transactions-title">
-        <div class="paper-bot-modal__header">
+        <header class="paper-bot-modal__header" data-html-tag="header">
           <div>
             <p class="eyebrow">Max Paper Bot</p>
             <h2 id="paper-bot-transactions-title">Transaction history</h2>
             <p id="paper-bot-transactions-summary">Every recorded paper trade will appear here.</p>
           </div>
           <button type="button" class="paper-bot-modal__close" id="paper-bot-transactions-close" aria-label="Close transactions">Close</button>
-        </div>
+        </header>
         <div class="paper-bot-modal__table-wrap">
-          <table class="paper-bot-table paper-bot-table--transactions">
+          <table class="paper-bot-table paper-bot-table--transactions" data-html-tag="table" aria-label="Paper bot transaction history">
             <thead>
               <tr>
                 <th>Time</th>
@@ -429,7 +431,7 @@
       </section>
     </div>
 
-    <nav class="mobile-tab-bar" aria-label="Mobile workspace navigation">
+    <nav class="mobile-tab-bar" aria-label="Mobile workspace navigation" data-html-tag="nav" data-html-role="Mobile workspace navigation">
       <a class="mobile-tab-bar__item" href="./">
         <span class="mobile-tab-bar__icon" aria-hidden="true">M</span>
         <span>Market</span>
@@ -703,7 +705,7 @@
 
     <script>
       (() => {
-        const cacheVersion = "20260515-nonprod-table-fit";
+        const cacheVersion = "20260516-worker-sync-toggle";
         const liveStateVersion = String(Date.now());
         const dependencyScripts = [
           "./data/market_universe.js",
