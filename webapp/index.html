@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golden Pocket Market Explorer</title>
-    <link rel="stylesheet" href="./styles.css?v=20260517-sync-poll-pause" />
+    <link rel="stylesheet" href="./styles.css?v=20260517-glass-toolbar" />
     <script>
       if (window.location.hash.includes("figmacapture=")) {
         const script = document.createElement("script");
@@ -21,23 +21,13 @@
           <header class="sidebar__brand">
             <h1 class="visually-hidden">Golden Pocket Lab Production Dashboard</h1>
             <div class="brand">
-              <div class="brand__mark brand__mark--figma" role="img" aria-label="Golden Pocket logo">
-                <svg viewBox="0 0 64 64" focusable="false" aria-hidden="true">
-                  <path d="M32 5 55 18.3v27.4L32 59 9 45.7V18.3L32 5Z" />
-                  <path d="M21 24.4h22v20.2L32 51 21 44.6V24.4Z" />
-                  <path d="M32 11.5V51M21 24.4l11 6.2 11-6.2" />
-                </svg>
-              </div>
-              <div class="brand__text">
-                <strong class="brand__name"><span>Golden</span><span>Pocket</span></strong>
-              </div>
+              <img class="brand__logo" src="./assets/brand/golden-pocket-lockup-master.svg" alt="Golden Pocket" />
             </div>
           </header>
 
           <a class="workspace-link workspace-link--fred" href="./fred.html">Fred Options</a>
 
           <div class="sidebar__status-actions">
-            <span class="status-pill" id="universe-status">Market universe loading</span>
             <button class="theme-toggle theme-toggle--compact" id="theme-toggle" type="button" aria-pressed="false" aria-label="Toggle color theme">
               <span class="theme-toggle__icon theme-toggle__icon--light" aria-hidden="true">
                 <svg viewBox="0 0 24 24" focusable="false">
@@ -91,6 +81,7 @@
             <button id="clear-filters" class="filter-button" type="button">Clear filters</button>
             <button class="layout-toggle" id="layout-toggle" type="button" aria-pressed="false">Layout mode</button>
           </div>
+          <span class="status-pill" id="universe-status">Market universe loading</span>
         </nav>
       </aside>
 
@@ -718,7 +709,7 @@
 
     <script>
       (() => {
-        const cacheVersion = "20260517-sync-poll-pause";
+        const cacheVersion = "20260517-glass-toolbar";
         const liveStateVersion = String(Date.now());
         const dependencyScripts = [
           "./data/market_universe.js",
