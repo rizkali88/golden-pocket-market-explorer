@@ -5954,12 +5954,19 @@ async function refreshPaperBotCloudState(options = {}) {
   }
 }
 
-function schedulePaperBotCloudStateRefresh() {
+function stopPaperBotCloudStateRefresh() {
   if (paperBotCloudStateTimer) {
     window.clearInterval(paperBotCloudStateTimer);
     paperBotCloudStateTimer = null;
   }
+}
+
+function schedulePaperBotCloudStateRefresh() {
+  stopPaperBotCloudStateRefresh();
   if (paperBotState.mode !== "max_autonomous_cloud") {
+    return;
+  }
+  if (!hasPaperBotCloudSync()) {
     return;
   }
   refreshPaperBotCloudState({ immediate: true });
@@ -6400,7 +6407,7 @@ function connectPaperBotSyncToken() {
   setPaperBotSyncToken(nextToken);
   updatePaperBotSyncConnectUi();
   if (hasPaperBotCloudSync()) {
-    refreshPaperBotCloudState({ immediate: true, force: true });
+    schedulePaperBotCloudStateRefresh();
   } else if (hasPaperBotSyncEndpoint()) {
     setPaperBotLiveStatus("Cloudflare Worker sync is paused on this device; static Max ledger remains visible.", "warning");
   }
@@ -6411,11 +6418,34 @@ function togglePaperBotWorkerSync() {
   updatePaperBotSyncConnectUi();
   if (paperBotSyncEnabled) {
     setPaperBotLiveStatus("Cloudflare Worker sync is on; refreshing the shared Max ledger.", "loading");
-    refreshPaperBotCloudState({ immediate: true, force: true });
+    schedulePaperBotCloudStateRefresh();
     return;
   }
+  stopPaperBotCloudStateRefresh();
   setPaperBotLiveStatus("Cloudflare Worker sync is off on this device; static Max ledger remains visible.", "warning");
-  refreshPaperBotCloudState({ immediate: true, force: true });
+  renderPaperBotPanelForCurrentSelection();
+}
+
+function handlePaperBotSyncStorageChange(event) {
+  if (event.key !== PAPER_BOT_SYNC_ENABLED_STORAGE_KEY) {
+    return;
+  }
+  const nextEnabled = event.newValue !== "off";
+  if (paperBotSyncEnabled === nextEnabled) {
+    return;
+  }
+  paperBotSyncEnabled = nextEnabled;
+  updatePaperBotSyncConnectUi();
+  if (paperBotSyncEnabled && hasPaperBotSyncEndpoint()) {
+    setPaperBotLiveStatus("Cloudflare Worker sync resumed from another open tab; refreshing shared Max ledger.", "loading");
+    schedulePaperBotCloudStateRefresh();
+    return;
+  }
+  stopPaperBotCloudStateRefresh();
+  if (hasPaperBotSyncEndpoint()) {
+    setPaperBotLiveStatus("Cloudflare Worker sync was paused from another open tab; this tab stopped polling.", "warning");
+  }
+  renderPaperBotPanelForCurrentSelection();
 }
 
 const paperBotEtFormatter = new Intl.DateTimeFormat("en-US", {
@@ -7892,6 +7922,8 @@ if (paperBotSyncConnect) {
 if (paperBotSyncToggle) {
   paperBotSyncToggle.addEventListener("click", togglePaperBotWorkerSync);
 }
+
+window.addEventListener("storage", handlePaperBotSyncStorageChange);
 
 if (paperBotTransactionsClose) {
   paperBotTransactionsClose.addEventListener("click", closePaperBotTransactionsModal);
