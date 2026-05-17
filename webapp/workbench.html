@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Golden Pocket Market Explorer - Non Production</title>
     <meta name="robots" content="noindex, nofollow" />
-    <link rel="stylesheet" href="./workbench.styles.css?v=20260517-glass-toolbar" />
+    <link rel="stylesheet" href="./workbench.styles.css?v=20260517-toolbar-right-actions" />
   </head>
   <body class="workbench-page">
     <div class="app-shell" data-html-tag="div" data-html-role="Application shell">
@@ -14,13 +14,12 @@
           <header class="sidebar__brand">
             <h1 class="visually-hidden">Golden Pocket Lab Non Production Dashboard</h1>
             <div class="brand">
-              <img class="brand__logo" src="./assets/brand/golden-pocket-lockup-master.svg" alt="Golden Pocket" />
+              <img class="brand__logo" src="./assets/brand/golden-pocket-final-logo.png" alt="Golden Pocket" />
             </div>
           </header>
 
-          <a class="workspace-link workspace-link--fred" href="./fred.html">Fred Options</a>
-
           <div class="sidebar__status-actions">
+            <a class="workspace-link workspace-link--fred" href="./fred.html">Fred Options</a>
             <button class="theme-toggle theme-toggle--compact" id="theme-toggle" type="button" aria-pressed="false" aria-label="Toggle color theme">
               <span class="theme-toggle__icon theme-toggle__icon--light" aria-hidden="true">
                 <svg viewBox="0 0 24 24" focusable="false">
@@ -702,7 +701,7 @@
 
     <script>
       (() => {
-        const cacheVersion = "20260517-glass-toolbar";
+        const cacheVersion = "20260517-toolbar-right-actions";
         const liveStateVersion = String(Date.now());
         const dependencyScripts = [
           "./data/market_universe.js",
